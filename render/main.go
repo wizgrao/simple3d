@@ -35,11 +35,11 @@ func main() {
 	}
 
 
-	triangles, _ := OpenObj("monkey.obj", bg)
+	triangles, _ := OpenObj(os.Args[1], bg)
 	fmt.Println(len(triangles))
 	DrawTriangles(image, triangles, lit)
 
-	f, _ := os.Create("asdfa.png")
+	f, _ := os.Create("out.png")
 	png.Encode(f, image)
 }
 

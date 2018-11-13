@@ -160,7 +160,7 @@ func DrawTriangle(im *image.RGBA, t *Triangle, l *Light) {
 	if inc < 0 {
 		inc *= -1
 	}
-	drawColor := color.RGBA{
+	drawColor := &color.RGBA{
 		R: uint8(float64(t.C.R) * float64(l.C.R) * inc / 255.0),
 		G: uint8(float64(t.C.G) * float64(l.C.G) * inc / 255.0),
 		B: uint8(float64(t.C.B) * float64(l.C.B) * inc / 255.0),
@@ -168,52 +168,38 @@ func DrawTriangle(im *image.RGBA, t *Triangle, l *Light) {
 	}
 	minPoint := im.Bounds().Min
 	maxPoint := im.Bounds().Max
-	imDx := maxPoint.X - minPoint.X
-	imDy := maxPoint.Y - minPoint.Y
-
 	p1 := t.P0.Dehom()
 	p2 := t.P1.Dehom()
 	p3 := t.P2.Dehom()
 
-	maxX := math.Max(math.Max(p1.X, p2.X), p3.X)
-	maxY := math.Max(math.Max(p1.Y, p2.Y), p3.Y)
-	minX := math.Min(math.Min(p1.X, p2.X), p3.X)
-	minY := math.Min(math.Min(p1.Y, p2.Y), p3.Y)
-
-	pminx := int(lin(minX, -1, 1, float64(minPoint.X), float64(maxPoint.X)))
-	pmaxx := int(lin(maxX, -1, 1, float64(minPoint.X), float64(maxPoint.X)))
-	pminy := int(lin(minY, -1, 1, float64(minPoint.Y), float64(maxPoint.Y)))
-	pmaxy := int(lin(maxY, -1, 1, float64(minPoint.Y), float64(maxPoint.Y)))
-
-	pminx = max(pminx, minPoint.X)
-	pmaxx = min(pmaxx, maxPoint.X)
-	pminy = max(pminy, minPoint.Y)
-	pmaxy = min(pmaxy, maxPoint.Y)
-	for i := pminx - 1; i < pmaxx+1; i++ {
-		for j := pminy - 1; j < pmaxy+1; j++ {
-			unproj := &Vector2{2*float64(i-minPoint.X)/float64(imDx) - 1, 2*float64(j-minPoint.Y)/float64(imDy) - 1}
-
-			if In(p1, p2, p3, unproj) {
-				im.Set(i+minPoint.X, j+minPoint.Y, drawColor)
-			}
-		}
+	p1proj := &Vector2{
+		X: lin(p1.X, -1, 1, float64(minPoint.X), float64(maxPoint.X)),
+		Y: lin(p1.Y, -1, 1, float64(minPoint.Y), float64(maxPoint.Y)),
 	}
-
+	p2proj := &Vector2{
+		X: lin(p2.X, -1, 1, float64(minPoint.X), float64(maxPoint.X)),
+		Y: lin(p2.Y, -1, 1, float64(minPoint.Y), float64(maxPoint.Y)),
+	}
+	p3proj := &Vector2{
+		X: lin(p3.X, -1, 1, float64(minPoint.X), float64(maxPoint.X)),
+		Y: lin(p3.Y, -1, 1, float64(minPoint.Y), float64(maxPoint.Y)),
+	}
+	DrawTriangle2(im, []*Vector2{p1proj, p2proj, p3proj}, drawColor)
 }
 
 func DrawTriangle2(im *image.RGBA, pts []*Vector2, rgba *color.RGBA) {
 	sort.Slice(pts, func(i, j int) bool {
 		return pts[i].Y < pts[j].Y
 	})
-	if pts[0].Y == pts[1].Y { //horiz on bottom
-		for y := int(pts[0].Y); y <= int(math.Ceil(pts[2].Y)); y++ {
-			horiz(im, y, int(lin(float64(y), pts[0].Y, pts[2].Y, pts[0].X, pts[2].X)), int(lin(float64(y), pts[1].Y, pts[2].Y, pts[1].X, pts[2].X)), rgba)
+	if int(pts[0].Y) == int(pts[1].Y) { //horiz on bottom
+		for y := int(math.Ceil(pts[0].Y)); y <= int(pts[2].Y); y++ {
+			horiz(im, y, lin(float64(y), pts[0].Y, pts[2].Y, pts[0].X, pts[2].X), lin(float64(y), pts[1].Y, pts[2].Y, pts[1].X, pts[2].X), rgba)
 		}
 		return
 	}
-	if pts[1].Y == pts[2].Y {
-		for y := int(pts[0].Y); y <= int(math.Ceil(pts[2].Y)); y++ {
-			horiz(im, y, int(lin(float64(y), pts[0].Y, pts[2].Y, pts[0].X, pts[2].X)), int(lin(float64(y), pts[0].Y, pts[1].Y, pts[0].X, pts[1].X)), rgba)
+	if int(pts[1].Y) == int(pts[2].Y) {
+		for y := int(math.Ceil(pts[0].Y)); y <= int(pts[2].Y); y++ {
+			horiz(im, y, lin(float64(y), pts[0].Y, pts[2].Y, pts[0].X, pts[2].X), lin(float64(y), pts[0].Y, pts[1].Y, pts[0].X, pts[1].X), rgba)
 		}
 		return
 
@@ -225,9 +211,9 @@ func DrawTriangle2(im *image.RGBA, pts []*Vector2, rgba *color.RGBA) {
 	DrawTriangle2(im, t2, rgba)
 }
 
-func horiz(im* image.RGBA, row, i, k int, rgba *color.RGBA) {
-	minX := min(i, k)
-	maxX := max(i, k)
+func horiz(im* image.RGBA, row int, i, k float64, rgba *color.RGBA) {
+	minX := int(math.Floor(math.Min(i, k)))
+	maxX := int(math.Ceil(math.Max(i, k)))
 	for j := minX; j < maxX+1; j++{
 		im.Set(j, row, rgba)
 	}

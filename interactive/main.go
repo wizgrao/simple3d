@@ -31,10 +31,17 @@ func (h* helloHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	xrs := r.Form.Get("xr")
 	yrs := r.Form.Get("yr")
 	zrs := r.Form.Get("zr")
+	xts := r.Form.Get("xt")
+	yts := r.Form.Get("yt")
+	zts := r.Form.Get("zt")
 
 	var xrp float64
 	var yrp float64
 	var zrp float64
+
+	var xtp float64
+	var ytp float64
+	var ztp float64
 
 	if x, err := strconv.ParseFloat(xrs, 64); err == nil{
 		xrp = x
@@ -45,8 +52,17 @@ func (h* helloHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if x, err := strconv.ParseFloat(zrs, 64); err == nil{
 		zrp = x
 	}
-	fmt.Println(xrp, yrp, zrp)
-	t := graphics.ApplyTransform(h.T, graphics.Translate(*xt, *yt, *zt).
+
+	if x, err := strconv.ParseFloat(xts, 64); err == nil{
+		xtp = x
+	}
+	if x, err := strconv.ParseFloat(yts, 64); err == nil{
+		ytp = x
+	}
+	if x, err := strconv.ParseFloat(zts, 64); err == nil{
+		ztp = x
+	}
+	t := graphics.ApplyTransform(h.T, graphics.Translate(*xt + xtp, *yt + ytp, *zt + ztp).
 		Mult(graphics.RotZ(zrp)).
 		Mult(graphics.RotY(yrp)).
 		Mult(graphics.RotX(xrp)))

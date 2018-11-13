@@ -11,6 +11,105 @@ import (
 	"strings"
 )
 
+type Vector4 struct {
+	X []float64
+}
+
+type Mat4 struct {
+	X []float64
+}
+
+func (m *Mat4)At(i, j int) float64{
+	return m.X[i*4 + j]
+}
+
+func (m *Mat4)Set(i, j int, val float64) {
+	m.X[i*4 + j] = val
+}
+
+func NewMat4() *Mat4{
+	m := Mat4{}
+	m.X = make([]float64, 16, 16)
+	for i:=0; i < 16; i+= 5 {
+		m.X[i] = 1
+	}
+	return &m
+}
+
+func (m *Mat4) Mult (n *Mat4)  *Mat4{
+	res := NewMat4()
+	for i:=0; i < 4; i++ {
+		for j:= 0; j < 4; j++ {
+			var sum float64
+			for k :=0; k < 4; k++ {
+				sum += m.At(i, k)*n.At(k, j)
+			}
+			res.Set(i, j, sum)
+		}
+	}
+	return res
+}
+
+func RotZ(theta float64) *Mat4 {
+	c := math.Cos(theta)
+	s := math.Sin(theta)
+
+	res := NewMat4()
+
+	res.X = []float64{
+		c, -s, 0, 0,
+		s, c, 0, 0,
+		0, 0, 1, 0,
+		0, 0, 0, 1,
+	}
+	return res
+}
+
+func RotY(theta float64) *Mat4 {
+	c := math.Cos(theta)
+	s := math.Sin(theta)
+
+	res := NewMat4()
+
+	res.X = []float64{
+		c, 0, -s, 0,
+		0, 1, 0, 0,
+		s, 0, c, 0,
+		0, 0, 0, 1,
+	}
+	return res
+}
+
+func RotX(theta float64) *Mat4 {
+	c := math.Cos(theta)
+	s := math.Sin(theta)
+
+	res := NewMat4()
+
+	res.X = []float64{
+		1, 0, 0, 0,
+		0, c, -s, 0,
+		0, s, c, 0,
+		0, 0, 0, 1,
+	}
+	return res
+}
+
+func Translate(x, y, z float64) *Mat4 {
+	res := NewMat4()
+
+	res.X = []float64{
+		1, 0, 0, x,
+		0, 1, 0, y,
+		0, 0, 1, z,
+		0, 0, 0, 1,
+	}
+	return res
+}
+
+
+
+
 type Vector3 struct {
 	X float64
 	Y float64
@@ -39,6 +138,20 @@ func (v *Vector3) Dehom() *Vector2 {
 	return &Vector2{
 		X: v.X / v.Z,
 		Y: v.Y / v.Z,
+	}
+}
+
+func (v *Vector3) Hom() *Vector4 {
+	return &Vector4{
+		X: []float64{v.X, v.Y, v.Z, 1},
+	}
+}
+
+func (v *Vector4) Dehom() *Vector3 {
+	return &Vector3{
+		X: v.X[0]/v.X[3],
+		Y: v.X[1]/v.X[3],
+		Z: v.X[2]/v.X[3],
 	}
 }
 
@@ -81,7 +194,7 @@ func DrawTriangle(im *image.RGBA, t *Triangle, l *Light) {
 			unproj := &Vector2{2*float64(i-minPoint.X)/float64(imDx) - 1, 2*float64(j-minPoint.Y)/float64(imDy) - 1}
 
 			if In(p1, p2, p3, unproj) {
-				im.Set(i, maxPoint.Y-j+minPoint.Y, drawColor)
+				im.Set(i+minPoint.X, j+minPoint.Y, drawColor)
 			}
 		}
 	}
@@ -143,6 +256,18 @@ func Cross(v1, v2 *Vector3) *Vector3 {
 	}
 }
 
+func (m *Mat4) Dot(v *Vector4)  *Vector4 {
+	x := make([]float64 , 4, 4)
+	for i:=0; i < 4; i++ {
+		var sum float64
+		for j:=0; j<4; j++ {
+			sum += m.At(i, j) * v.X[j]
+		}
+		x[i] = sum
+	}
+	return &Vector4{X:x}
+}
+
 func (v *Vector3) Norm() float64 {
 	return math.Sqrt(v.X*v.X + v.Y*v.Y + v.Z*v.Z)
 }
@@ -164,6 +289,8 @@ func (v *Vector3) Scale(s float64) *Vector3 {
 	}
 }
 
+
+
 func CalcNorm(p0, p1, p2 *Vector3) *Vector3 {
 	res := Cross(p0.Sub(p1), p0.Sub(p2)).Normalize()
 	return res
@@ -178,7 +305,18 @@ func NewTriangle(p0, p1, p2 *Vector3, c *color.RGBA) *Triangle {
 		C:    c,
 	}
 }
-
+func ApplyTransform(triangles []*Triangle, mat *Mat4) []*Triangle{
+	res := make([]*Triangle, len(triangles), len(triangles))
+	for i, t := range triangles {
+		res[i] = NewTriangle(
+			mat.Dot(t.P0.Hom()).Dehom(),
+			mat.Dot(t.P1.Hom()).Dehom(),
+			mat.Dot(t.P2.Hom()).Dehom(),
+			t.C,
+		)
+	}
+	return res
+}
 func OpenObj(filename string, rgba *color.RGBA) ([]*Triangle, error) {
 	f, err := os.Open(filename)
 	if err != nil {
@@ -204,7 +342,7 @@ func OpenObj(filename string, rgba *color.RGBA) ([]*Triangle, error) {
 			y, _ := strconv.ParseFloat(ys, 64)
 			z, _ := strconv.ParseFloat(zs, 64)
 
-			points = append(points, &Vector3{x, y, -z + 1.8})
+			points = append(points, &Vector3{x, y, z})
 		}
 		if t == "f" {
 			reader.Scan()

@@ -5,7 +5,6 @@ import (
 	"image/color"
 	"image/png"
 	"os"
-	"fmt"
 	"github.com/wizgrao/raytracer/graphics"
 	"flag"
 	"math"
@@ -26,7 +25,6 @@ var (
 
 func main() {
 	flag.Parse()
-	fmt.Println(graphics.RotZ(math.Pi/4).Dot((&graphics.Vector3{1,0,0}).Hom()).Dehom())
 	im := image.NewRGBA(image.Rect(0, 0, *size, *size))
 	californiaGold := &color.RGBA{196, 130, 15, 255}
 	berkeleyBlue := &color.RGBA{0, 50, 98, 255}
@@ -35,7 +33,7 @@ func main() {
 			im.Set(i, j, berkeleyBlue)
 		}
 	}
-	lit := &graphics.Light{
+	/*lit := &graphics.Light{
 		Norm: (&graphics.Vector3{0, 1, 1}).Normalize(),
 		C: &color.RGBA{
 			R:255,
@@ -43,15 +41,20 @@ func main() {
 			B:255,
 			A:255,
 		},
-	}
+	}*/
 	triangles, _ := graphics.OpenObj(*inputFile, californiaGold)
-	fmt.Println(len(triangles))
 	transform := graphics.Translate(*xt, *yt, *zt).
 		Mult(graphics.RotZ(*zr)).
 		Mult(graphics.RotY(*yr)).
 		Mult(graphics.RotX(*xr))
 	triangles = graphics.ApplyTransform(triangles, transform)
-	graphics.DrawTriangles(im, triangles, lit)
+	//graphics.DrawTriangles(im, triangles, lit)
+	points2 := []*graphics.Vector2{
+		{0, 30},
+		{1000, 400},
+		{500, 1200},
+	}
+	graphics.DrawTriangle2(im, points2, californiaGold)
 	f, _ := os.Create(*outputFile)
 	png.Encode(f, im)
 }

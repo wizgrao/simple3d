@@ -201,6 +201,39 @@ func DrawTriangle(im *image.RGBA, t *Triangle, l *Light) {
 
 }
 
+func DrawTriangle2(im *image.RGBA, pts []*Vector2, rgba *color.RGBA) {
+	sort.Slice(pts, func(i, j int) bool {
+		return pts[i].Y < pts[j].Y
+	})
+	if pts[0].Y == pts[1].Y { //horiz on bottom
+		for y := int(pts[0].Y); y <= int(math.Ceil(pts[2].Y)); y++ {
+			horiz(im, y, int(lin(float64(y), pts[0].Y, pts[2].Y, pts[0].X, pts[2].X)), int(lin(float64(y), pts[1].Y, pts[2].Y, pts[1].X, pts[2].X)), rgba)
+		}
+		return
+	}
+	if pts[1].Y == pts[2].Y {
+		for y := int(pts[0].Y); y <= int(math.Ceil(pts[2].Y)); y++ {
+			horiz(im, y, int(lin(float64(y), pts[0].Y, pts[2].Y, pts[0].X, pts[2].X)), int(lin(float64(y), pts[0].Y, pts[1].Y, pts[0].X, pts[1].X)), rgba)
+		}
+		return
+
+	}
+	bisect := &Vector2{lin(pts[1].Y, pts[0].Y, pts[2].Y, pts[0].X, pts[2].X), pts[1].Y}
+	t1 := []*Vector2{pts[0], pts[1], bisect}
+	t2 := []*Vector2{pts[1], pts[2], bisect}
+	DrawTriangle2(im, t1, rgba)
+	DrawTriangle2(im, t2, rgba)
+}
+
+func horiz(im* image.RGBA, row, i, k int, rgba *color.RGBA) {
+	minX := min(i, k)
+	maxX := max(i, k)
+	for j := minX; j < maxX+1; j++{
+		im.Set(j, row, rgba)
+	}
+}
+
+
 func DrawTriangles(im *image.RGBA, t []*Triangle, l *Light) {
 	sort.Slice(t, func(i, j int) bool {
 		return t[i].Centroid().Z > t[j].Centroid().Z

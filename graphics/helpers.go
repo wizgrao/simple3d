@@ -4,338 +4,135 @@ import (
 	"bufio"
 	"image"
 	"image/color"
-	"math"
 	"os"
-	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"math"
 )
 
-type Vector4 struct {
-	X []float64
-}
-
-type Mat4 struct {
-	X []float64
-}
-
-func (m *Mat4)At(i, j int) float64{
-	return m.X[i*4 + j]
-}
-
-func (m *Mat4)Set(i, j int, val float64) {
-	m.X[i*4 + j] = val
-}
-
-func NewMat4() *Mat4{
-	m := Mat4{}
-	m.X = make([]float64, 16, 16)
-	for i:=0; i < 16; i+= 5 {
-		m.X[i] = 1
-	}
-	return &m
-}
-
-func (m *Mat4) Mult (n *Mat4)  *Mat4{
-	res := NewMat4()
-	for i:=0; i < 4; i++ {
-		for j:= 0; j < 4; j++ {
-			var sum float64
-			for k :=0; k < 4; k++ {
-				sum += m.At(i, k)*n.At(k, j)
-			}
-			res.Set(i, j, sum)
-		}
-	}
-	return res
-}
-
-func RotZ(theta float64) *Mat4 {
-	c := math.Cos(theta)
-	s := math.Sin(theta)
-
-	res := NewMat4()
-
-	res.X = []float64{
-		c, -s, 0, 0,
-		s, c, 0, 0,
-		0, 0, 1, 0,
-		0, 0, 0, 1,
-	}
-	return res
-}
-
-func RotY(theta float64) *Mat4 {
-	c := math.Cos(theta)
-	s := math.Sin(theta)
-
-	res := NewMat4()
-
-	res.X = []float64{
-		c, 0, -s, 0,
-		0, 1, 0, 0,
-		s, 0, c, 0,
-		0, 0, 0, 1,
-	}
-	return res
-}
-
-func RotX(theta float64) *Mat4 {
-	c := math.Cos(theta)
-	s := math.Sin(theta)
-
-	res := NewMat4()
-
-	res.X = []float64{
-		1, 0, 0, 0,
-		0, c, -s, 0,
-		0, s, c, 0,
-		0, 0, 0, 1,
-	}
-	return res
-}
-
-func Translate(x, y, z float64) *Mat4 {
-	res := NewMat4()
-
-	res.X = []float64{
-		1, 0, 0, x,
-		0, 1, 0, y,
-		0, 0, 1, z,
-		0, 0, 0, 1,
-	}
-	return res
-}
-
-
-
-
-type Vector3 struct {
-	X float64
-	Y float64
-	Z float64
-}
-
-type Vector2 struct {
-	X float64
-	Y float64
-}
-
-type Triangle struct {
-	P0   *Vector3
-	P1   *Vector3
-	P2   *Vector3
-	Norm *Vector3
-	C    *color.RGBA
-}
 
 type Light struct {
-	Norm *Vector3
+	Norm *Vector3 //direction of light ray
 	C    *color.RGBA
 }
 
-func (v *Vector3) Dehom() *Vector2 {
-	return &Vector2{
-		X: v.X / v.Z,
-		Y: v.Y / v.Z,
-	}
+
+type Material struct {
+	C *color.RGBA
+	SpecColor *color.RGBA
+	SpecCoeff float64
+	AmbientCoeff float64
 }
 
-func (v *Vector3) Hom() *Vector4 {
-	return &Vector4{
-		X: []float64{v.X, v.Y, v.Z, 1},
+func (m *Material) Render(normal, camera *Vector3, l *Light) *color.RGBA{
+	if normal.Dot(camera) >0 {
+		normal = normal.Scale(-1)
 	}
-}
-
-func (v *Vector4) Dehom() *Vector3 {
-	return &Vector3{
-		X: v.X[0]/v.X[3],
-		Y: v.X[1]/v.X[3],
-		Z: v.X[2]/v.X[3],
-	}
-}
-
-func DrawTriangle(im *image.RGBA, t *Triangle, l *Light) {
-	inc := -t.Norm.Dot(l.Norm)
+	inc := -normal.Dot(l.Norm)
 	if inc < 0 {
-		inc *= -1
+		inc = 0
 	}
-	drawColor := &color.RGBA{
-		R: uint8(float64(t.C.R) * float64(l.C.R) * inc / 255.0),
-		G: uint8(float64(t.C.G) * float64(l.C.G) * inc / 255.0),
-		B: uint8(float64(t.C.B) * float64(l.C.B) * inc / 255.0),
-		A: 255,
+	reflecc := normal.Scale(2*normal.Dot(l.Norm)).Sub(l.Norm)
+	specCos := reflecc.Dot(camera)
+	if specCos < 0 {
+		specCos = 0
 	}
-	minPoint := im.Bounds().Min
-	maxPoint := im.Bounds().Max
-	p1 := t.P0.Dehom()
-	p2 := t.P1.Dehom()
-	p3 := t.P2.Dehom()
-
-	p1proj := &Vector2{
-		X: lin(p1.X, -1, 1, float64(minPoint.X), float64(maxPoint.X)),
-		Y: lin(p1.Y, -1, 1, float64(minPoint.Y), float64(maxPoint.Y)),
-	}
-	p2proj := &Vector2{
-		X: lin(p2.X, -1, 1, float64(minPoint.X), float64(maxPoint.X)),
-		Y: lin(p2.Y, -1, 1, float64(minPoint.Y), float64(maxPoint.Y)),
-	}
-	p3proj := &Vector2{
-		X: lin(p3.X, -1, 1, float64(minPoint.X), float64(maxPoint.X)),
-		Y: lin(p3.Y, -1, 1, float64(minPoint.Y), float64(maxPoint.Y)),
-	}
-	DrawTriangle2(im, []*Vector2{p1proj, p2proj, p3proj}, drawColor)
-}
-
-func DrawTriangle2(im *image.RGBA, pts []*Vector2, rgba *color.RGBA) {
-	sort.Slice(pts, func(i, j int) bool {
-		return pts[i].Y < pts[j].Y
-	})
-	if int(pts[0].Y) == int(pts[1].Y) { //horiz on bottom
-		for y := int(math.Ceil(pts[0].Y)); y <= int(pts[2].Y); y++ {
-			horiz(im, y, lin(float64(y), pts[0].Y, pts[2].Y, pts[0].X, pts[2].X), lin(float64(y), pts[1].Y, pts[2].Y, pts[1].X, pts[2].X), rgba)
-		}
-		return
-	}
-	if int(pts[1].Y) == int(pts[2].Y) {
-		for y := int(math.Ceil(pts[0].Y)); y <= int(pts[2].Y); y++ {
-			horiz(im, y, lin(float64(y), pts[0].Y, pts[2].Y, pts[0].X, pts[2].X), lin(float64(y), pts[0].Y, pts[1].Y, pts[0].X, pts[1].X), rgba)
-		}
-		return
-
-	}
-	bisect := &Vector2{lin(pts[1].Y, pts[0].Y, pts[2].Y, pts[0].X, pts[2].X), pts[1].Y}
-	t1 := []*Vector2{pts[0], pts[1], bisect}
-	t2 := []*Vector2{pts[1], pts[2], bisect}
-	DrawTriangle2(im, t1, rgba)
-	DrawTriangle2(im, t2, rgba)
-}
-
-func horiz(im* image.RGBA, row int, i, k float64, rgba *color.RGBA) {
-	minX := int(math.Floor(math.Min(i, k)))
-	maxX := int(math.Ceil(math.Max(i, k)))
-	for j := minX; j < maxX+1; j++{
-		im.Set(j, row, rgba)
-	}
-}
-
-
-func DrawTriangles(im *image.RGBA, t []*Triangle, l *Light) {
-	sort.Slice(t, func(i, j int) bool {
-		return t[i].Centroid().Z > t[j].Centroid().Z
-	})
-
-	for _, tri := range t {
-		DrawTriangle(im, tri, l)
-	}
-}
-func (t *Triangle) Centroid() *Vector3 {
-	return t.P0.Add(t.P1).Add(t.P2).Scale(1.0 / 3.0)
-}
-func (u *Vector3) Dot(v *Vector3) float64 {
-	return u.X*v.X + u.Y*v.Y + u.Z*v.Z
-}
-
-func (u *Vector2) Sub(v *Vector2) *Vector2 {
-	return &Vector2{
-		X: u.X - v.X,
-		Y: u.Y - v.Y,
-	}
-}
-
-func (u *Vector3) Sub(v *Vector3) *Vector3 {
-	return &Vector3{
-		X: u.X - v.X,
-		Y: u.Y - v.Y,
-		Z: u.Z - v.Z,
-	}
-}
-
-func (u *Vector3) Add(v *Vector3) *Vector3 {
-	return &Vector3{
-		X: u.X + v.X,
-		Y: u.Y + v.Y,
-		Z: u.Z + v.Z,
-	}
-}
-
-func In(p0, p1, p2, p *Vector2) bool {
-	area := 0.5 * (-p1.Y*p2.X + p0.Y*(-p1.X+p2.X) + p0.X*(p1.Y-p2.Y) + p1.X*p2.Y)
-	s := 1 / (2 * area) * (p0.Y*p2.X - p0.X*p2.Y + (p2.Y-p0.Y)*p.X + (p0.X-p2.X)*p.Y)
-	t := 1 / (2 * area) * (p0.X*p1.Y - p0.Y*p1.X + (p0.Y-p1.Y)*p.X + (p1.X-p0.X)*p.Y)
-	return s > 0 && t > 0 && 1-s-t > 0
+	specColor := ColorMult(ColorScale(m.SpecColor, math.Pow(specCos, m.SpecCoeff)), l.C)
+	diffColor := ColorMult(ColorScale(m.C, inc), l.C)
+	ambColor := ColorScale(m.C, m.AmbientCoeff)
+	return ColorAdd(ColorAdd(specColor, diffColor), ambColor)
 
 }
 
-func Cross(v1, v2 *Vector3) *Vector3 {
-	return &Vector3{
-		X: v1.Y*v2.Z - v1.Z*v2.Y,
-		Y: -(v1.X*v2.Z - v1.Z*v2.Z),
-		Z: v1.X*v2.Y - v1.Y*v2.X,
+func DrawTrianglesParallel(im *image.RGBA, t []*Triangle, l *Light) {
+	width := im.Rect.Max.X - im.Rect.Min.X
+	height := im.Rect.Max.Y - im.Rect.Min.Y
+	zbuf := make([][]float64, width, width)
+	zbuflock :=make([][]sync.Mutex, width ,width)
+	wg := sync.WaitGroup{}
+	for row := range zbuf {
+		zbuf[row] = make([]float64, height, height)
+		zbuflock[row] = make([]sync.Mutex, height, height)
+	}
+	for _,tri := range t {
+		wg.Add(1)
+		go func(tri *Triangle) {
+			inc := -tri.Norm.Dot(l.Norm)
+			if inc < 0 {
+				inc *= -1
+			}
+
+			p0 := tri.P0.Dehom()
+			p1 := tri.P1.Dehom()
+			p2 := tri.P2.Dehom()
+
+			minx := int(lin(min3(p0.X, p1.X, p2.X), -1, 1, 0, float64(width)))
+			miny := int(lin(min3(p0.Y, p1.Y, p2.Y), -1, 1, 0, float64(height)))
+			maxx := int(lin(max3(p0.X, p1.X, p2.X), -1, 1, 0, float64(width)))
+			maxy := int(lin(max3(p0.Y, p1.Y, p2.Y), -1, 1, 0, float64(height)))
+
+			for i := maxi(minx, 0); i < mini(maxx+1, width); i++ {
+				for j := maxi(miny, 0); j < mini(maxy+1, height); j++ {
+					coordx := lin(float64(i), 0, float64(width), -1, 1)
+					coordy := lin(float64(j), 0, float64(height), -1, 1)
+
+					screenCoord := &Vector2{coordx, coordy}
+					if In(p0, p1, p2, screenCoord) {
+						dePerp := tri.DePerp(&Vector2{coordx, coordy})
+						zbuflock[i][j].Lock()
+						if zbuf[i][j] == 0 || zbuf[i][j] > dePerp.Z {
+							zbuf[i][j] = dePerp.Z
+							im.Set(i, j, tri.Render(tri.Norm, screenCoord.Hom().Normalize(), l))
+						}
+						zbuflock[i][j].Unlock()
+					}
+				}
+			}
+			wg.Done()
+		}(tri)
+	}
+	wg.Wait()
+}
+
+func ColorInterp(c0, c1, c2 *color.RGBA, s0, s1, s2 float64) *color.RGBA{
+	return &color.RGBA{
+		R: uint8(float64(c0.R) * s0 + float64(c1.R) * s1 + float64(c2.R) * s2),
+		G: uint8(float64(c0.G) * s0 + float64(c1.G) * s1 + float64(c2.G) * s2),
+		B: uint8(float64(c0.B) * s0 + float64(c1.B) * s1 + float64(c2.B) * s2),
+		A: uint8(float64(c0.A) * s0 + float64(c1.A) * s1 + float64(c2.A) * s2),
 	}
 }
 
-func (m *Mat4) Dot(v *Vector4)  *Vector4 {
-	x := make([]float64 , 4, 4)
-	for i:=0; i < 4; i++ {
-		var sum float64
-		for j:=0; j<4; j++ {
-			sum += m.At(i, j) * v.X[j]
-		}
-		x[i] = sum
-	}
-	return &Vector4{X:x}
-}
-
-func (v *Vector3) Norm() float64 {
-	return math.Sqrt(v.X*v.X + v.Y*v.Y + v.Z*v.Z)
-}
-
-func (v *Vector3) Normalize() *Vector3 {
-	norm := v.Norm()
-	return &Vector3{
-		X: v.X / norm,
-		Y: v.Y / norm,
-		Z: v.Z / norm,
+func ColorAdd(c0, c1 *color.RGBA) *color.RGBA{
+	return &color.RGBA{
+		R: uint8(mini(255, int(c0.R) + int(c1.R))),
+		G: uint8(mini(255, int(c0.G) + int(c1.G))),
+		B: uint8(mini(255, int(c0.B) + int(c1.B))),
+		A: uint8(mini(255, int(c0.A) + int(c1.A))),
 	}
 }
 
-func (v *Vector3) Scale(s float64) *Vector3 {
-	return &Vector3{
-		X: v.X * s,
-		Y: v.Y * s,
-		Z: v.Z * s,
+func ColorMult(c0, c1 *color.RGBA) *color.RGBA{
+	return &color.RGBA{
+		R:  uint8(int(c0.R) * int(c1.R)/255),
+		G: uint8(int(c0.G) * int(c1.G)/255),
+		B:  uint8(int(c0.B) * int(c1.B)/255),
+		A:  uint8(int(c0.A) * int(c1.A)/255),
 	}
 }
 
 
-
-func CalcNorm(p0, p1, p2 *Vector3) *Vector3 {
-	res := Cross(p0.Sub(p1), p0.Sub(p2)).Normalize()
-	return res
-}
-
-func NewTriangle(p0, p1, p2 *Vector3, c *color.RGBA) *Triangle {
-	return &Triangle{
-		P0:   p0,
-		P1:   p1,
-		P2:   p2,
-		Norm: CalcNorm(p0, p1, p2),
-		C:    c,
+func ColorScale(c *color.RGBA, s float64) *color.RGBA{
+	return &color.RGBA{
+		R: uint8(float64(c.R)*s),
+		G:uint8(float64(c.G)*s),
+		B: uint8(float64(c.B)*s),
+		A: c.A,
 	}
 }
-func ApplyTransform(triangles []*Triangle, mat *Mat4) []*Triangle{
-	res := make([]*Triangle, len(triangles), len(triangles))
-	for i, t := range triangles {
-		res[i] = NewTriangle(
-			mat.Dot(t.P0.Hom()).Dehom(),
-			mat.Dot(t.P1.Hom()).Dehom(),
-			mat.Dot(t.P2.Hom()).Dehom(),
-			t.C,
-		)
-	}
-	return res
-}
+
+
 func OpenObj(filename string, rgba *color.RGBA) ([]*Triangle, error) {
 	f, err := os.Open(filename)
 	if err != nil {
@@ -387,16 +184,53 @@ func lin(p, mini, maxi, mino, maxo float64) float64 {
 	return (maxo-mino)*(p-mini)/(maxi-mini) + mino
 }
 
-func min(x, y int) int {
+func min(x, y float64) float64 {
 	if x < y {
 		return x
 	}
 	return y
 }
 
-func max(x, y int) int {
+
+func mini(x, y int) int {
+	if x < y {
+		return x
+	}
+	return y
+}
+
+func max(x, y float64) float64 {
 	if x > y {
 		return x
 	}
 	return y
+}
+
+func maxi(x, y int) int {
+	if x > y {
+		return x
+	}
+	return y
+}
+
+func maxu(x, y uint8) uint8 {
+	if x > y {
+		return x
+	}
+	return y
+}
+
+func minu(x, y uint8) uint8 {
+	if x < y {
+		return x
+	}
+	return y
+}
+
+func min3(x, y, z float64) float64 {
+	return min(min(x, y), z)
+}
+
+func max3(x, y, z float64) float64 {
+	return max(max(x, y), z)
 }

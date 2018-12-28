@@ -8,7 +8,6 @@ import (
 	"github.com/wizgrao/raytracer/graphics"
 	"flag"
 	"math"
-	"fmt"
 )
 
 var (
@@ -44,14 +43,12 @@ func main() {
 		},
 	}
 	triangles, _ := graphics.OpenObj(*inputFile, californiaGold)
-	fmt.Println("ayy lmfao")
 	transform := graphics.Translate(*xt, *yt, *zt).
 		Mult(graphics.RotZ(*zr)).
 		Mult(graphics.RotY(*yr)).
 		Mult(graphics.RotX(*xr))
 	triangles = graphics.ApplyTransform(triangles, transform)
-	fmt.Println("asdf")
-	graphics.DrawTriangles(im, triangles, lit)
+	graphics.DrawTrianglesParallel(im, triangles, lit)
 	f, _ := os.Create(*outputFile)
 	png.Encode(f, im)
 }

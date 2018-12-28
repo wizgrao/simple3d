@@ -61,6 +61,7 @@ func (h* helloHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if x, err := strconv.ParseFloat(zts, 64); err == nil{
 		ztp = x
+		fmt.Println("yote")
 	}
 	t := graphics.ApplyTransform(h.T, graphics.Translate(*xt + xtp, *yt + ytp, *zt + ztp).
 		Mult(graphics.RotZ(zrp)).
@@ -74,7 +75,7 @@ func (h* helloHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	lit := &graphics.Light{
-		Norm: (&graphics.Vector3{0, 1, 1}).Normalize(),
+		Norm: (&graphics.Vector3{1, 1, 1}).Normalize(),
 		C: &color.RGBA{
 			R:255,
 			G:255,
@@ -82,7 +83,7 @@ func (h* helloHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			A:255,
 		},
 	}
-	graphics.DrawTriangles(im, t, lit)
+	graphics.DrawTrianglesParallel(im, t, lit)
 
 	buffer := new(bytes.Buffer)
 	if err := png.Encode(buffer, im); err != nil {

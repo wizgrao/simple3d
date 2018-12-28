@@ -17,6 +17,9 @@ type Light struct {
 	C    *color.RGBA
 }
 
+var (
+	zero3 Vector3
+)
 
 type Material struct {
 	C *color.RGBA
@@ -83,7 +86,9 @@ func DrawTrianglesParallel(im *image.RGBA, t []*Triangle, l *Light) {
 						zbuflock[i][j].Lock()
 						if zbuf[i][j] == 0 || zbuf[i][j] > dePerp.Z {
 							zbuf[i][j] = dePerp.Z
-							im.Set(i, j, tri.Render(tri.Norm, screenCoord.Hom().Normalize(), l))
+							u, v, w := tri.Bary(dePerp)
+							norm := tri.N0.Scale(u).Add(tri.N1.Scale(v)).Add(tri.N2.Scale(w))
+							im.Set(i, j, tri.Render(norm, screenCoord.Hom().Normalize(), l))
 						}
 						zbuflock[i][j].Unlock()
 					}
@@ -142,6 +147,7 @@ func OpenObj(filename string, rgba *color.RGBA) ([]*Triangle, error) {
 	reader := bufio.NewScanner(f)
 	reader.Split(bufio.ScanWords)
 	var points []*Vector3
+	var normals []*Vector3
 	var triangles []*Triangle
 
 	for reader.Scan() {
@@ -160,19 +166,64 @@ func OpenObj(filename string, rgba *color.RGBA) ([]*Triangle, error) {
 
 			points = append(points, &Vector3{x, y, z})
 		}
-		if t == "f" {
+		if t == "vn" {
 			reader.Scan()
-			xs := strings.Split(reader.Text(), "/")[0]
+			xs := reader.Text()
 			reader.Scan()
-			ys := strings.Split(reader.Text(), "/")[0]
+			ys := reader.Text()
 			reader.Scan()
-			zs := strings.Split(reader.Text(), "/")[0]
+			zs := reader.Text()
 
+			x, _ := strconv.ParseFloat(xs, 64)
+			y, _ := strconv.ParseFloat(ys, 64)
+			z, _ := strconv.ParseFloat(zs, 64)
+
+			normals = append(normals, &Vector3{x, y, z})
+		}
+		if t == "f" {
+			var xn, yn, zn string
+			reader.Scan()
+			val := strings.Split(reader.Text(), "/")
+			xs := val[0]
+			if len(val) == 3 {
+				xn = val[2]
+			}else {
+				xn = "0"
+			}
+			reader.Scan()
+			val = strings.Split(reader.Text(), "/")
+			ys := val[0]
+			if len(val) == 3 {
+				yn = val[2]
+			} else {
+				yn = "0"
+			}
+			reader.Scan()
+			val = strings.Split(reader.Text(), "/")
+			zs := val[0]
+			if len(val) == 3 {
+				zn = val[2]
+			} else {
+				zn = "0"
+			}
 			x, _ := strconv.ParseInt(xs, 10, 32)
 			y, _ := strconv.ParseInt(ys, 10, 32)
 			z, _ := strconv.ParseInt(zs, 10, 32)
+			xnn, _ := strconv.ParseInt(xn, 10, 32)
+			ynn, _ := strconv.ParseInt(yn, 10, 32)
+			znn, _ := strconv.ParseInt(zn, 10, 32)
+			t := NewTriangle(points[x-1], points[y-1], points[z-1], rgba)
+			if xnn != 0 {
+				t.N0 = normals[xnn-1]
+				t.N1 = normals[ynn-1]
+				t.N2 = normals[znn-1]
+			} else {
+				t.N0 = t.Norm
+				t.N1 = t.Norm
+				t.N2 = t.Norm
+			}
+			triangles = append(triangles, t)
 
-			triangles = append(triangles, NewTriangle(points[x-1], points[y-1], points[z-1], rgba))
 
 		}
 	}

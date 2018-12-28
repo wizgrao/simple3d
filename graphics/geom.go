@@ -126,6 +126,10 @@ type Triangle struct {
 	P0   *Vector3
 	P1   *Vector3
 	P2   *Vector3
+	N0   *Vector3
+	N1   *Vector3
+	N2   *Vector3
+
 	Norm *Vector3
 	*Material
 
@@ -147,9 +151,17 @@ func (v *Vector3) Dehom() *Vector2 {
 	}
 }
 
+
+
 func (v *Vector3) Hom() *Vector4 {
 	return &Vector4{
 		X: []float64{v.X, v.Y, v.Z, 1},
+	}
+}
+
+func (v *Vector3) Ext() *Vector4 {
+	return &Vector4{
+		X: []float64{v.X, v.Y, v.Z, 0},
 	}
 }
 
@@ -158,6 +170,15 @@ func (v *Vector4) Dehom() *Vector3 {
 		X: v.X[0]/v.X[3],
 		Y: v.X[1]/v.X[3],
 		Z: v.X[2]/v.X[3],
+	}
+}
+
+
+func (v *Vector4) Unex() *Vector3 {
+	return &Vector3{
+		X: v.X[0],
+		Y: v.X[1],
+		Z: v.X[2],
 	}
 }
 
@@ -302,6 +323,10 @@ func ApplyTransform(triangles []*Triangle, mat *Mat4) []*Triangle{
 			mat.Dot(t.P2.Hom()).Dehom(),
 			t.C,
 		)
+		res[i].N0 = mat.Dot(t.N0.Ext()).Unex()
+		res[i].N1 = mat.Dot(t.N1.Ext()).Unex()
+		res[i].N2 = mat.Dot(t.N2.Ext()).Unex()
+
 	}
 	return res
 }

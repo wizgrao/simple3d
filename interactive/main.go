@@ -24,9 +24,11 @@ var (
 	xr = flag.Float64("xr", 0, "Rotation in X direction")
 	yr = flag.Float64("yr", math.Pi, "Rotation in Y direction")
 	zr = flag.Float64("zr", math.Pi, "Rotation in Z direction")
+	port = flag.String("p", "8080", "port")
 
 )
 func (h* helloHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("request")
 	r.ParseForm()
 	xrs := r.Form.Get("xr")
 	yrs := r.Form.Get("yr")
@@ -61,7 +63,6 @@ func (h* helloHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if x, err := strconv.ParseFloat(zts, 64); err == nil{
 		ztp = x
-		fmt.Println("yote")
 	}
 	t := graphics.ApplyTransform(h.T, graphics.Translate(*xt + xtp, *yt + ytp, *zt + ztp).
 		Mult(graphics.RotZ(zrp)).
@@ -95,6 +96,7 @@ func (h* helloHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if _, err := w.Write(buffer.Bytes()); err != nil {
 		log.Println("unable to write image.")
 	}
+	fmt.Println("done")
 
 }
 func main() {
@@ -107,5 +109,5 @@ func main() {
 	triangles = graphics.ApplyTransform(triangles, transform)
 	handler := &helloHandler{triangles}
 	http.Handle("/", handler)
-	fmt.Print(http.ListenAndServe(":8080", nil))
+	fmt.Print(http.ListenAndServe(":" + *port, nil))
 }

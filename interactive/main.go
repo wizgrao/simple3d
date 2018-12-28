@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"flag"
 	"math"
-	"github.com/wizgrao/raytracer/graphics"
+	"github.com/wizgrao/simple3d/graphics"
 	"image"
 	"image/color"
 	"bytes"

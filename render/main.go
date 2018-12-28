@@ -5,7 +5,7 @@ import (
 	"image/color"
 	"image/png"
 	"os"
-	"github.com/wizgrao/raytracer/graphics"
+	"github.com/wizgrao/simple3d/graphics"
 	"flag"
 	"math"
 )

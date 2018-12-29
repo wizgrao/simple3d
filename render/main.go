@@ -26,29 +26,33 @@ var (
 func main() {
 	flag.Parse()
 	im := image.NewRGBA(image.Rect(0, 0, *size, *size))
-	californiaGold := &color.RGBA{196, 130, 15, 255}
-	berkeleyBlue := &color.RGBA{0, 50, 98, 255}
+	fg := &color.RGBA{255, 255, 255, 255}
+	bg := &color.RGBA{0, 0, 0, 255}
 	for i := 0; i < *size; i++ {
 		for j := 0; j < *size; j++ {
-			im.Set(i, j, berkeleyBlue)
+			im.Set(i, j, bg)
 		}
 	}
-	lit := &graphics.Light{
-		Norm: (&graphics.Vector3{0, 1, 1}).Normalize(),
-		C: &color.RGBA{
-			R:255,
-			G:255,
-			B:255,
-			A:255,
-		},
+	triangles, _ := graphics.OpenObj(*inputFile, fg)
+
+	lit1 := &graphics.PointLight{
+		Location: &graphics.Vector3{2, 1, 0},
+		R: 500,
 	}
-	triangles, _ := graphics.OpenObj(*inputFile, californiaGold)
+	lit2 := &graphics.PointLight{
+		Location: &graphics.Vector3{-2, 1, 0},
+		B: 500,
+	}
+	lit3 := &graphics.PointLight{
+		Location: &graphics.Vector3{0, 1, -1},
+		G: 500,
+	}
 	transform := graphics.Translate(*xt, *yt, *zt).
 		Mult(graphics.RotZ(*zr)).
 		Mult(graphics.RotY(*yr)).
 		Mult(graphics.RotX(*xr))
 	triangles = graphics.ApplyTransform(triangles, transform)
-	graphics.DrawTrianglesParallel(im, triangles, lit)
+	graphics.DrawTrianglesParallel(im, triangles, []graphics.Light{lit1, lit2, lit3})
 	f, _ := os.Create(*outputFile)
 	png.Encode(f, im)
 }

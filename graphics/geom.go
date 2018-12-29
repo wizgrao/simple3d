@@ -2,7 +2,6 @@ package graphics
 
 import (
 	"math"
-	"image/color"
 )
 
 type Vector4 struct {
@@ -131,7 +130,7 @@ type Triangle struct {
 	N2   *Vector3
 
 	Norm *Vector3
-	*Material
+	Material
 
 }
 
@@ -298,18 +297,13 @@ func (t *Triangle) In(vx *Vector3) bool{
 	u, v, w := t.Bary(vx)
 	return u + v + w <= 1.0001
 }
-func NewTriangle(p0, p1, p2 *Vector3, c *color.RGBA) *Triangle {
+func NewTriangle(p0, p1, p2 *Vector3, m Material) *Triangle {
 	return &Triangle{
 		P0:   p0,
 		P1:   p1,
 		P2:   p2,
 		Norm: CalcNorm(p0, p1, p2),
-		Material:    &Material{
-			C: c,
-			SpecColor: &color.RGBA{255, 255, 255, 255},
-			SpecCoeff: 8,
-			AmbientCoeff: .1,
-		},
+		Material:   m,
 	}
 }
 
@@ -321,11 +315,13 @@ func ApplyTransform(triangles []*Triangle, mat *Mat4) []*Triangle{
 			mat.Dot(t.P0.Hom()).Dehom(),
 			mat.Dot(t.P1.Hom()).Dehom(),
 			mat.Dot(t.P2.Hom()).Dehom(),
-			t.C,
+			t.Material,
 		)
 		res[i].N0 = mat.Dot(t.N0.Ext()).Unex()
 		res[i].N1 = mat.Dot(t.N1.Ext()).Unex()
 		res[i].N2 = mat.Dot(t.N2.Ext()).Unex()
+
+
 
 	}
 	return res

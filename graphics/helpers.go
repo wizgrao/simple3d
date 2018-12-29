@@ -11,61 +11,114 @@ import (
 	"math"
 )
 
-
-type Light struct {
-	Norm *Vector3 //direction of light ray
-	C    *color.RGBA
+type Light interface {
+	Norm(*Vector3) *Vector3
+	Intensity(*Vector3) *color.RGBA
 }
 
-var (
-	zero3 Vector3
-)
 
-type Material struct {
-	C *color.RGBA
-	SpecColor *color.RGBA
-	SpecCoeff float64
-	AmbientCoeff float64
+
+type DirectionLight struct {
+	Direction *Vector3
+	Color     *color.RGBA
 }
 
-func (m *Material) Render(normal, camera *Vector3, l *Light) *color.RGBA{
-	if normal.Dot(camera) >0 {
-		normal = normal.Scale(-1)
-	}
-	inc := -normal.Dot(l.Norm)
-	if inc < 0 {
-		inc = 0
-	}
-	reflecc := normal.Scale(2*normal.Dot(l.Norm)).Sub(l.Norm)
-	specCos := reflecc.Dot(camera)
-	if specCos < 0 {
-		specCos = 0
-	}
-	specColor := ColorMult(ColorScale(m.SpecColor, math.Pow(specCos, m.SpecCoeff)), l.C)
-	diffColor := ColorMult(ColorScale(m.C, inc), l.C)
-	ambColor := ColorScale(m.C, m.AmbientCoeff)
-	return ColorAdd(ColorAdd(specColor, diffColor), ambColor)
-
+type PointLight struct {
+	Location *Vector3
+	R float64
+	G float64
+	B float64
 }
 
-func DrawTrianglesParallel(im *image.RGBA, t []*Triangle, l *Light) {
+func (d *PointLight) Norm(v *Vector3) *Vector3{
+	return v.Sub(d.Location).Normalize()
+}
+
+func (d *PointLight) Intensity(v *Vector3) *color.RGBA {
+	dist := v.Sub(d.Location).Norm()
+	return &color.RGBA{
+		R: uint8(min(255, d.R/(dist*dist))),
+		G: uint8(min(255, d.G/(dist*dist))),
+		B: uint8(min(255, d.B/(dist*dist))),
+		A: 255,
+	}
+}
+
+
+func (d *DirectionLight) Norm(_ *Vector3) *Vector3{
+	return d.Direction
+}
+
+func (d *DirectionLight) Intensity(_ *Vector3) *color.RGBA {
+	return d.Color
+}
+
+type Material interface {
+	C(*Vector2)            *color.RGBA
+	SpecColor(*Vector2)    *color.RGBA
+	SpecCoeff(*Vector2)    float64
+	AmbientCoeff(vector2 *Vector2) float64
+}
+
+type SolidMaterial struct {
+	C_ *color.RGBA
+	SpecColor_ *color.RGBA
+	SpecCoeff_ float64
+	AmbientCoeff_ float64
+}
+
+
+func (s *SolidMaterial) C(_ *Vector2) *color.RGBA {
+	return s.C_
+}
+func (s *SolidMaterial) SpecColor(_ *Vector2) *color.RGBA {
+	return s.SpecColor_
+}
+func (s *SolidMaterial) SpecCoeff(_ *Vector2) float64 {
+	return s.SpecCoeff_
+}
+func (s *SolidMaterial) AmbientCoeff(vector2 *Vector2) float64 {
+	return s.AmbientCoeff_
+}
+
+func Render(m Material, normal, camera *Vector3, lights []Light, v *Vector3, uv *Vector2) *color.RGBA {
+	ret := &color.RGBA{}
+	for _, l := range lights {
+		lnorm := l.Norm(v)
+		lintense := l.Intensity(v)
+		if normal.Dot(camera) > 0 {
+			normal = normal.Scale(-1)
+		}
+		inc := -normal.Dot(l.Norm(v))
+		if inc < 0 {
+			inc = 0
+		}
+		reflecc := normal.Scale(2 * normal.Dot(l.Norm(v))).Sub(lnorm)
+		specCos := reflecc.Dot(camera)
+		if specCos < 0 {
+			specCos = 0
+		}
+		specColor := ColorMult(ColorScale(m.SpecColor(uv), math.Pow(specCos, m.SpecCoeff(uv))), lintense)
+		diffColor := ColorMult(ColorScale(m.C(uv), inc), lintense)
+		ambColor := ColorScale(m.C(uv), m.AmbientCoeff(uv))
+		ret = ColorAdd(ret, ColorAdd(ColorAdd(specColor, diffColor), ambColor))
+	}
+	return ret
+}
+
+func DrawTrianglesParallel(im *image.RGBA, t []*Triangle, l []Light) {
 	width := im.Rect.Max.X - im.Rect.Min.X
 	height := im.Rect.Max.Y - im.Rect.Min.Y
 	zbuf := make([][]float64, width, width)
-	zbuflock :=make([][]sync.Mutex, width ,width)
+	zbuflock := make([][]sync.Mutex, width, width)
 	wg := sync.WaitGroup{}
 	for row := range zbuf {
 		zbuf[row] = make([]float64, height, height)
 		zbuflock[row] = make([]sync.Mutex, height, height)
 	}
-	for _,tri := range t {
+	for _, tri := range t {
 		wg.Add(1)
 		go func(tri *Triangle) {
-			inc := -tri.Norm.Dot(l.Norm)
-			if inc < 0 {
-				inc *= -1
-			}
-
 			p0 := tri.P0.Dehom()
 			p1 := tri.P1.Dehom()
 			p2 := tri.P2.Dehom()
@@ -88,7 +141,7 @@ func DrawTrianglesParallel(im *image.RGBA, t []*Triangle, l *Light) {
 							zbuf[i][j] = dePerp.Z
 							u, v, w := tri.Bary(dePerp)
 							norm := tri.N0.Scale(u).Add(tri.N1.Scale(v)).Add(tri.N2.Scale(w))
-							im.Set(i, j, tri.Render(norm, screenCoord.Hom().Normalize(), l))
+							im.Set(i, j, Render(tri.Material, norm, screenCoord.Hom().Normalize(), l, dePerp, &Vector2{u, v}))
 						}
 						zbuflock[i][j].Unlock()
 					}
@@ -100,43 +153,41 @@ func DrawTrianglesParallel(im *image.RGBA, t []*Triangle, l *Light) {
 	wg.Wait()
 }
 
-func ColorInterp(c0, c1, c2 *color.RGBA, s0, s1, s2 float64) *color.RGBA{
+func ColorInterp(c0, c1, c2 *color.RGBA, s0, s1, s2 float64) *color.RGBA {
 	return &color.RGBA{
-		R: uint8(float64(c0.R) * s0 + float64(c1.R) * s1 + float64(c2.R) * s2),
-		G: uint8(float64(c0.G) * s0 + float64(c1.G) * s1 + float64(c2.G) * s2),
-		B: uint8(float64(c0.B) * s0 + float64(c1.B) * s1 + float64(c2.B) * s2),
-		A: uint8(float64(c0.A) * s0 + float64(c1.A) * s1 + float64(c2.A) * s2),
+		R: uint8(float64(c0.R)*s0 + float64(c1.R)*s1 + float64(c2.R)*s2),
+		G: uint8(float64(c0.G)*s0 + float64(c1.G)*s1 + float64(c2.G)*s2),
+		B: uint8(float64(c0.B)*s0 + float64(c1.B)*s1 + float64(c2.B)*s2),
+		A: uint8(float64(c0.A)*s0 + float64(c1.A)*s1 + float64(c2.A)*s2),
 	}
 }
 
-func ColorAdd(c0, c1 *color.RGBA) *color.RGBA{
+func ColorAdd(c0, c1 *color.RGBA) *color.RGBA {
 	return &color.RGBA{
-		R: uint8(mini(255, int(c0.R) + int(c1.R))),
-		G: uint8(mini(255, int(c0.G) + int(c1.G))),
-		B: uint8(mini(255, int(c0.B) + int(c1.B))),
-		A: uint8(mini(255, int(c0.A) + int(c1.A))),
+		R: uint8(mini(255, int(c0.R)+int(c1.R))),
+		G: uint8(mini(255, int(c0.G)+int(c1.G))),
+		B: uint8(mini(255, int(c0.B)+int(c1.B))),
+		A: uint8(mini(255, int(c0.A)+int(c1.A))),
 	}
 }
 
-func ColorMult(c0, c1 *color.RGBA) *color.RGBA{
+func ColorMult(c0, c1 *color.RGBA) *color.RGBA {
 	return &color.RGBA{
-		R:  uint8(int(c0.R) * int(c1.R)/255),
-		G: uint8(int(c0.G) * int(c1.G)/255),
-		B:  uint8(int(c0.B) * int(c1.B)/255),
-		A:  uint8(int(c0.A) * int(c1.A)/255),
+		R: uint8(int(c0.R) * int(c1.R) / 255),
+		G: uint8(int(c0.G) * int(c1.G) / 255),
+		B: uint8(int(c0.B) * int(c1.B) / 255),
+		A: uint8(int(c0.A) * int(c1.A) / 255),
 	}
 }
 
-
-func ColorScale(c *color.RGBA, s float64) *color.RGBA{
+func ColorScale(c *color.RGBA, s float64) *color.RGBA {
 	return &color.RGBA{
-		R: uint8(float64(c.R)*s),
-		G:uint8(float64(c.G)*s),
-		B: uint8(float64(c.B)*s),
+		R: uint8(float64(c.R) * s),
+		G: uint8(float64(c.G) * s),
+		B: uint8(float64(c.B) * s),
 		A: c.A,
 	}
 }
-
 
 func OpenObj(filename string, rgba *color.RGBA) ([]*Triangle, error) {
 	f, err := os.Open(filename)
@@ -187,7 +238,7 @@ func OpenObj(filename string, rgba *color.RGBA) ([]*Triangle, error) {
 			xs := val[0]
 			if len(val) == 3 {
 				xn = val[2]
-			}else {
+			} else {
 				xn = "0"
 			}
 			reader.Scan()
@@ -212,7 +263,12 @@ func OpenObj(filename string, rgba *color.RGBA) ([]*Triangle, error) {
 			xnn, _ := strconv.ParseInt(xn, 10, 32)
 			ynn, _ := strconv.ParseInt(yn, 10, 32)
 			znn, _ := strconv.ParseInt(zn, 10, 32)
-			t := NewTriangle(points[x-1], points[y-1], points[z-1], rgba)
+			t := NewTriangle(points[x-1], points[y-1], points[z-1],  &SolidMaterial{
+				C_: rgba,
+				SpecColor_: &color.RGBA{255, 255, 255, 255},
+				SpecCoeff_: 8,
+				AmbientCoeff_: .01,
+			})
 			if xnn != 0 {
 				t.N0 = normals[xnn-1]
 				t.N1 = normals[ynn-1]
@@ -223,7 +279,6 @@ func OpenObj(filename string, rgba *color.RGBA) ([]*Triangle, error) {
 				t.N2 = t.Norm
 			}
 			triangles = append(triangles, t)
-
 
 		}
 	}
@@ -241,7 +296,6 @@ func min(x, y float64) float64 {
 	}
 	return y
 }
-
 
 func mini(x, y int) int {
 	if x < y {

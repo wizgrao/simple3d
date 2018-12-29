@@ -15,6 +15,7 @@ import (
 )
 
 type helloHandler struct {T []*graphics.Triangle}
+type otherHandler struct {T []*graphics.Triangle}
 var (
 	inputFile = flag.String("i", "in.obj", "Input file (png)")
 	size = flag.Int("s", 2000, "Size of output image")
@@ -27,8 +28,8 @@ var (
 	port = flag.String("p", "8080", "port")
 
 )
-func (h* helloHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("request")
+
+func parseForm(r *http.Request) (xrp, yrp, zrp, xtp, ytp, ztp float64) {
 	r.ParseForm()
 	xrs := r.Form.Get("xr")
 	yrs := r.Form.Get("yr")
@@ -36,14 +37,6 @@ func (h* helloHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	xts := r.Form.Get("xt")
 	yts := r.Form.Get("yt")
 	zts := r.Form.Get("zt")
-
-	var xrp float64
-	var yrp float64
-	var zrp float64
-
-	var xtp float64
-	var ytp float64
-	var ztp float64
 
 	if x, err := strconv.ParseFloat(xrs, 64); err == nil{
 		xrp = x
@@ -61,9 +54,15 @@ func (h* helloHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if x, err := strconv.ParseFloat(yts, 64); err == nil{
 		ytp = x
 	}
-	if x, err := strconv.ParseFloat(zts, 64); err == nil{
+	if x, err := strconv.ParseFloat(zts, 64); err == nil {
 		ztp = x
 	}
+	return
+}
+
+func (h* helloHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("request")
+	xrp, yrp, zrp, xtp, ytp, ztp := parseForm(r)
 	t := graphics.ApplyTransform(h.T, graphics.Translate(*xt + xtp, *yt + ytp, *zt + ztp).
 		Mult(graphics.RotZ(zrp)).
 		Mult(graphics.RotY(yrp)).
@@ -75,16 +74,16 @@ func (h* helloHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			im.Set(i, j, berkeleyBlue)
 		}
 	}
-	lit := &graphics.Light{
-		Norm: (&graphics.Vector3{1, 1, 1}).Normalize(),
-		C: &color.RGBA{
+	lit := &graphics.DirectionLight{
+		Direction: (&graphics.Vector3{1, 1, 1}).Normalize(),
+		Color: &color.RGBA{
 			R:255,
 			G:255,
 			B:255,
 			A:255,
 		},
 	}
-	graphics.DrawTrianglesParallel(im, t, lit)
+	graphics.DrawTrianglesParallel(im, t, []graphics.Light{lit})
 
 	buffer := new(bytes.Buffer)
 	if err := png.Encode(buffer, im); err != nil {
@@ -99,15 +98,60 @@ func (h* helloHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("done")
 
 }
+
+func (h* otherHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("request")
+	xrp, yrp, zrp, xtp, ytp, ztp := parseForm(r)
+	t := graphics.ApplyTransform(h.T, graphics.Translate(*xt + xtp, *yt + ytp, *zt + ztp).
+		Mult(graphics.RotZ(zrp)).
+		Mult(graphics.RotY(yrp)).
+		Mult(graphics.RotX(xrp)))
+	im := image.NewRGBA(image.Rect(0, 0, *size, *size))
+	bg := &color.RGBA{0, 0, 0, 255}
+	for i := 0; i < *size; i++ {
+		for j := 0; j < *size; j++ {
+			im.Set(i, j, bg)
+		}
+	}
+	lit1 := &graphics.PointLight{
+		Location: &graphics.Vector3{2, 1, 0},
+		R: 500,
+	}
+	lit2 := &graphics.PointLight{
+		Location: &graphics.Vector3{-2, 1, 0},
+		B: 500,
+	}
+	lit3 := &graphics.PointLight{
+		Location: &graphics.Vector3{0, 1, -1},
+		G: 500,
+	}
+	graphics.DrawTrianglesParallel(im, t, []graphics.Light{lit1, lit2, lit3})
+
+	buffer := new(bytes.Buffer)
+	if err := png.Encode(buffer, im); err != nil {
+		log.Println("unable to encode image.")
+	}
+
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Content-Length", strconv.Itoa(len(buffer.Bytes())))
+	if _, err := w.Write(buffer.Bytes()); err != nil {
+		log.Println("unable to write image.")
+	}
+	fmt.Println("done")
+
+}
+
 func main() {
 	flag.Parse()
-	californiaGold := &color.RGBA{196, 130, 15, 255}
-	triangles, _ := graphics.OpenObj(*inputFile, californiaGold)
+	fg := &color.RGBA{255, 255, 255, 255}
+	triangles, _ := graphics.OpenObj(*inputFile, fg)
 	transform := graphics.RotZ(*zr).
 		Mult(graphics.RotY(*yr)).
 		Mult(graphics.RotX(*xr))
 	triangles = graphics.ApplyTransform(triangles, transform)
 	handler := &helloHandler{triangles}
+	http.Handle("/points", &otherHandler{triangles})
 	http.Handle("/", handler)
+	fmt.Println("Listening on port "+*port)
 	fmt.Print(http.ListenAndServe(":" + *port, nil))
 }

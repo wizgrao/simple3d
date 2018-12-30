@@ -213,6 +213,13 @@ func (u *Vector3) Add(v *Vector3) *Vector3 {
 	}
 }
 
+func (u *Vector2) Add(v *Vector2) *Vector2 {
+	return &Vector2{
+		X: u.X + v.X,
+		Y: u.Y + v.Y,
+	}
+}
+
 func In(p0, p1, p2, p *Vector2) bool {
 	area := 0.5 * (-p1.Y*p2.X + p0.Y*(-p1.X+p2.X) + p0.X*(p1.Y-p2.Y) + p1.X*p2.Y)
 	s := 1 / (2 * area) * (p0.Y*p2.X - p0.X*p2.Y + (p2.Y-p0.Y)*p.X + (p0.X-p2.X)*p.Y)
@@ -262,6 +269,13 @@ func (v *Vector3) Scale(s float64) *Vector3 {
 	}
 }
 
+func (v *Vector2) Scale(s float64) *Vector2 {
+	return &Vector2{
+		X: v.X * s,
+		Y: v.Y * s,
+	}
+}
+
 
 
 func CalcNorm(p0, p1, p2 *Vector3) *Vector3 {
@@ -298,12 +312,16 @@ func (t *Triangle) In(vx *Vector3) bool{
 	return u + v + w <= 1.0001
 }
 func NewTriangle(p0, p1, p2 *Vector3, m Material) *Triangle {
+	norm := CalcNorm(p0, p1, p2)
 	return &Triangle{
 		P0:   p0,
 		P1:   p1,
 		P2:   p2,
-		Norm: CalcNorm(p0, p1, p2),
+		Norm: norm,
 		Material:   m,
+		N0: norm,
+		N1: norm,
+		N2: norm,
 	}
 }
 

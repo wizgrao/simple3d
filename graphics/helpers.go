@@ -2,8 +2,8 @@ package graphics
 
 import (
 	"bufio"
-	"image"
 	"image/color"
+	"image"
 	"os"
 	"strconv"
 	"strings"
@@ -15,8 +15,6 @@ type Light interface {
 	Norm(*Vector3) *Vector3
 	Intensity(*Vector3) *color.RGBA
 }
-
-
 
 type DirectionLight struct {
 	Direction *Vector3
@@ -68,6 +66,7 @@ type SolidMaterial struct {
 }
 
 
+
 func (s *SolidMaterial) C(_ *Vector2) *color.RGBA {
 	return s.C_
 }
@@ -78,6 +77,44 @@ func (s *SolidMaterial) SpecCoeff(_ *Vector2) float64 {
 	return s.SpecCoeff_
 }
 func (s *SolidMaterial) AmbientCoeff(vector2 *Vector2) float64 {
+	return s.AmbientCoeff_
+}
+
+
+type TextureMaterial struct {
+	Im image.Image
+	P1 *Vector2
+	P2 *Vector2
+	P3 *Vector2
+	
+	SpecColor_ *color.RGBA
+	SpecCoeff_ float64
+	AmbientCoeff_ float64
+}
+
+func (s *TextureMaterial) C(vec *Vector2) *color.RGBA {
+	u := vec.X
+	v := vec.Y
+	w := 1 - u - v
+	texNormalCoordinate := s.P1.Scale(u).Add(s.P2.Scale(v)).Add(s.P3.Scale(w))
+	texCoordinateX := lin(texNormalCoordinate.X, 0, 1, float64(s.Im.Bounds().Min.X), float64(s.Im.Bounds().Max.X))
+	texCoordinateY := lin(texNormalCoordinate.Y, 0, 1, float64(s.Im.Bounds().Min.Y), float64(s.Im.Bounds().Max.Y))
+	c := s.Im.At(int(math.Round(texCoordinateX)), int(math.Round(texCoordinateY)))
+	r, g, b, _ := c.RGBA()
+	return &color.RGBA {
+		R: uint8(r/256),
+		G: uint8(g/256),
+		B: uint8(b/256),
+		A: 255,
+	}
+}
+func (s *TextureMaterial) SpecColor(_ *Vector2) *color.RGBA {
+	return s.SpecColor_
+}
+func (s *TextureMaterial) SpecCoeff(_ *Vector2) float64 {
+	return s.SpecCoeff_
+}
+func (s *TextureMaterial) AmbientCoeff(vector2 *Vector2) float64 {
 	return s.AmbientCoeff_
 }
 

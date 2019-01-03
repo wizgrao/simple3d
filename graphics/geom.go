@@ -224,7 +224,7 @@ func In(p0, p1, p2, p *Vector2) bool {
 	area := 0.5 * (-p1.Y*p2.X + p0.Y*(-p1.X+p2.X) + p0.X*(p1.Y-p2.Y) + p1.X*p2.Y)
 	s := 1 / (2 * area) * (p0.Y*p2.X - p0.X*p2.Y + (p2.Y-p0.Y)*p.X + (p0.X-p2.X)*p.Y)
 	t := 1 / (2 * area) * (p0.X*p1.Y - p0.Y*p1.X + (p0.Y-p1.Y)*p.X + (p1.X-p0.X)*p.Y)
-	return s > 0 && t > 0 && 1-s-t > 0
+	return s >= 0 && t >= 0 && 1-s-t >= 0
 
 }
 

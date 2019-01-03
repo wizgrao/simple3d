@@ -13,7 +13,7 @@ import (
 
 var (
 	outputFile = flag.String("o", "out.png", "Output File (png)")
-	inputFile = flag.String("i", "in.obj", "Input file (png)")
+	inputFile = flag.String("i", "in.png", "Input file (png)")
 	size = flag.Int("s", 2000, "Size of output image")
 	xt = flag.Float64("xt", 0, "Translation in X direction")
 	yt = flag.Float64("yt", 0, "Translation in Y direction")

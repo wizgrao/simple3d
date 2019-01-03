@@ -2,13 +2,13 @@ package graphics
 
 import (
 	"bufio"
-	"image/color"
 	"image"
+	"image/color"
+	"math"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
-	"math"
 )
 
 type Light interface {
@@ -23,12 +23,12 @@ type DirectionLight struct {
 
 type PointLight struct {
 	Location *Vector3
-	R float64
-	G float64
-	B float64
+	R        float64
+	G        float64
+	B        float64
 }
 
-func (d *PointLight) Norm(v *Vector3) *Vector3{
+func (d *PointLight) Norm(v *Vector3) *Vector3 {
 	return v.Sub(d.Location).Normalize()
 }
 
@@ -42,8 +42,7 @@ func (d *PointLight) Intensity(v *Vector3) *color.RGBA {
 	}
 }
 
-
-func (d *DirectionLight) Norm(_ *Vector3) *Vector3{
+func (d *DirectionLight) Norm(_ *Vector3) *Vector3 {
 	return d.Direction
 }
 
@@ -52,23 +51,21 @@ func (d *DirectionLight) Intensity(_ *Vector3) *color.RGBA {
 }
 
 type Material interface {
-	C(*Vector2)            *color.RGBA
-	SpecColor(*Vector2)    *color.RGBA
-	SpecCoeff(*Vector2)    float64
+	C(*Vector2) *color.RGBA
+	SpecColor(*Vector2) *color.RGBA
+	SpecCoeff(*Vector2) float64
 	AmbientCoeff(vector2 *Vector2) float64
 }
 
 type SolidMaterial struct {
-	C_ *color.RGBA
-	SpecColor_ *color.RGBA
-	SpecCoeff_ float64
+	Color         *color.RGBA
+	SpecColor_    *color.RGBA
+	SpecCoeff_    float64
 	AmbientCoeff_ float64
 }
 
-
-
 func (s *SolidMaterial) C(_ *Vector2) *color.RGBA {
-	return s.C_
+	return s.Color
 }
 func (s *SolidMaterial) SpecColor(_ *Vector2) *color.RGBA {
 	return s.SpecColor_
@@ -80,15 +77,14 @@ func (s *SolidMaterial) AmbientCoeff(vector2 *Vector2) float64 {
 	return s.AmbientCoeff_
 }
 
-
 type TextureMaterial struct {
 	Im image.Image
 	P1 *Vector2
 	P2 *Vector2
 	P3 *Vector2
-	
-	SpecColor_ *color.RGBA
-	SpecCoeff_ float64
+
+	SpecColor_    *color.RGBA
+	SpecCoeff_    float64
 	AmbientCoeff_ float64
 }
 
@@ -99,12 +95,27 @@ func (s *TextureMaterial) C(vec *Vector2) *color.RGBA {
 	texNormalCoordinate := s.P1.Scale(u).Add(s.P2.Scale(v)).Add(s.P3.Scale(w))
 	texCoordinateX := lin(texNormalCoordinate.X, 0, 1, float64(s.Im.Bounds().Min.X), float64(s.Im.Bounds().Max.X))
 	texCoordinateY := lin(texNormalCoordinate.Y, 0, 1, float64(s.Im.Bounds().Min.Y), float64(s.Im.Bounds().Max.Y))
-	c := s.Im.At(int(math.Round(texCoordinateX)), int(math.Round(texCoordinateY)))
+	bl := ToRGBA(s.Im.At(int(math.Floor(texCoordinateX)), int(math.Floor(texCoordinateY))))
+	br := ToRGBA(s.Im.At(int(math.Ceil(texCoordinateX)), int(math.Floor(texCoordinateY))))
+	tl := ToRGBA(s.Im.At(int(math.Floor(texCoordinateX)), int(math.Ceil(texCoordinateY))))
+	tr := ToRGBA(s.Im.At(int(math.Ceil(texCoordinateX)), int(math.Ceil(texCoordinateY))))
+
+	fracX := texCoordinateX - math.Floor(texCoordinateX)
+	fracY := texCoordinateY - math.Floor(texCoordinateY)
+	top := ColorAdd(ColorScale(tl, 1-fracX), ColorScale(tr, fracX))
+	bottom := ColorAdd(ColorScale(bl, 1-fracX), ColorScale(br, fracX))
+
+	return ColorAdd(ColorScale(bottom, 1-fracY), ColorScale(top, fracY))
+
+}
+
+
+func ToRGBA(c color.Color) *color.RGBA{
 	r, g, b, _ := c.RGBA()
-	return &color.RGBA {
-		R: uint8(r/256),
-		G: uint8(g/256),
-		B: uint8(b/256),
+	return &color.RGBA{
+		R: uint8(r / 256),
+		G: uint8(g / 256),
+		B: uint8(b / 256),
 		A: 255,
 	}
 }
@@ -123,9 +134,7 @@ func Render(m Material, normal, camera *Vector3, lights []Light, v *Vector3, uv 
 	for _, l := range lights {
 		lnorm := l.Norm(v)
 		lintense := l.Intensity(v)
-		if normal.Dot(camera) > 0 {
-			normal = normal.Scale(-1)
-		}
+
 		inc := -normal.Dot(l.Norm(v))
 		if inc < 0 {
 			inc = 0
@@ -171,17 +180,22 @@ func DrawTrianglesParallel(im *image.RGBA, t []*Triangle, l []Light) {
 					coordy := lin(float64(j), 0, float64(height), -1, 1)
 
 					screenCoord := &Vector2{coordx, coordy}
-					if In(p0, p1, p2, screenCoord) {
-						dePerp := tri.DePerp(&Vector2{coordx, coordy})
-						zbuflock[i][j].Lock()
-						if zbuf[i][j] == 0 || zbuf[i][j] > dePerp.Z {
-							zbuf[i][j] = dePerp.Z
-							u, v, w := tri.Bary(dePerp)
-							norm := tri.N0.Scale(u).Add(tri.N1.Scale(v)).Add(tri.N2.Scale(w))
-							im.Set(i, j, Render(tri.Material, norm, screenCoord.Hom().Normalize(), l, dePerp, &Vector2{u, v}))
-						}
-						zbuflock[i][j].Unlock()
+					if !In(p0, p1, p2, screenCoord) {
+						continue
 					}
+					dePerp := tri.DePerp(&Vector2{coordx, coordy})
+					zbuflock[i][j].Lock()
+					if !(zbuf[i][j] == 0 || zbuf[i][j] > dePerp.Z) {
+						zbuflock[i][j].Unlock()
+						continue
+					}
+					zbuf[i][j] = dePerp.Z
+					u, v, w := tri.Bary(dePerp)
+					norm := tri.N0.Scale(u).Add(tri.N1.Scale(v)).Add(tri.N2.Scale(w)).Normalize()
+					im.Set(i, j, Render(tri.Material, norm, screenCoord.Hom().Normalize(), l, dePerp, &Vector2{u, v}))
+
+					zbuflock[i][j].Unlock()
+
 				}
 			}
 			wg.Done()
@@ -300,10 +314,10 @@ func OpenObj(filename string, rgba *color.RGBA) ([]*Triangle, error) {
 			xnn, _ := strconv.ParseInt(xn, 10, 32)
 			ynn, _ := strconv.ParseInt(yn, 10, 32)
 			znn, _ := strconv.ParseInt(zn, 10, 32)
-			t := NewTriangle(points[x-1], points[y-1], points[z-1],  &SolidMaterial{
-				C_: rgba,
-				SpecColor_: &color.RGBA{255, 255, 255, 255},
-				SpecCoeff_: 8,
+			t := NewTriangle(points[x-1], points[y-1], points[z-1], &SolidMaterial{
+				Color:         rgba,
+				SpecColor_:    &color.RGBA{255, 255, 255, 255},
+				SpecCoeff_:    8,
 				AmbientCoeff_: .01,
 			})
 			if xnn != 0 {

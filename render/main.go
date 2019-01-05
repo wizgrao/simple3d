@@ -20,6 +20,7 @@ var (
 	xr = flag.Float64("xr", 0, "Rotation in X direction")
 	yr = flag.Float64("yr", math.Pi, "Rotation in Y direction")
 	zr = flag.Float64("zr", math.Pi, "Rotation in Z direction")
+	shadow = flag.Bool("h", false, "whether to draw shadows")
 
 )
 
@@ -28,6 +29,14 @@ func main() {
 	im := image.NewRGBA(image.Rect(0, 0, *size, *size))
 	fg := &color.RGBA{255, 255, 255, 255}
 	bg := &color.RGBA{0, 0, 0, 255}
+
+	m := &graphics.SolidMaterial{
+		Color:         fg,
+		SpecColor_:    &color.RGBA{255, 255, 255, 255},
+		SpecCoeff_:    8,
+		AmbientCoeff_: .01,
+	}
+
 	for i := 0; i < *size; i++ {
 		for j := 0; j < *size; j++ {
 			im.Set(i, j, bg)
@@ -36,23 +45,46 @@ func main() {
 	triangles, _ := graphics.OpenObj(*inputFile, fg)
 
 	lit1 := &graphics.PointLight{
-		Location: &graphics.Vector3{2, 1, 0},
-		R: 500,
+		Location: &graphics.Vector3{1, -1, 1},
+		R: 1000,
 	}
 	lit2 := &graphics.PointLight{
-		Location: &graphics.Vector3{-2, 1, 0},
-		B: 500,
+		Location: &graphics.Vector3{-1, -1, 1},
+		B: 1000,
 	}
 	lit3 := &graphics.PointLight{
-		Location: &graphics.Vector3{0, 1, -1},
-		G: 500,
+		Location: &graphics.Vector3{0, -2, -1},
+		G: 1000,
 	}
+	/*lit4 := &graphics.DirectionLight{
+		Direction: &graphics.Vector3{0,1, 0},
+		Color: fg,
+	}*/
 	transform := graphics.Translate(*xt, *yt, *zt).
 		Mult(graphics.RotZ(*zr)).
 		Mult(graphics.RotY(*yr)).
 		Mult(graphics.RotX(*xr))
 	triangles = graphics.ApplyTransform(triangles, transform)
-	graphics.DrawTrianglesParallel(im, triangles, []graphics.Light{lit1, lit2, lit3})
+	f1 := &graphics.Vector3{-10, 1, .01}
+	f2 := &graphics.Vector3{10, 1, .01}
+	f3 := &graphics.Vector3{10, 1, 10}
+	f4 := &graphics.Vector3{-10, 1, 10}
+	n := &graphics.Vector3{0, -1, 0}
+	t1 := graphics.NewTriangle(f1, f2, f3, m)
+	t1.N0 = n
+	t1.N1 = n
+	t1.N2 = n
+
+	t2 := graphics.NewTriangle(f1, f3, f4, m)
+	t2.N0 = n
+	t2.N1 = n
+	t2.N2 = n
+	triangles = append(triangles, t1, t2)
+	fn := graphics.DrawTrianglesParallel
+	if *shadow {
+		fn = graphics.DrawTrianglesParallelShadow
+	}
+	fn(im, triangles, []graphics.Light{lit1, lit2, lit3})
 	f, _ := os.Create(*outputFile)
 	png.Encode(f, im)
 }

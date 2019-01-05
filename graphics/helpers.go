@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"fmt"
+	"sync/atomic"
 )
 
 type Light interface {
@@ -130,7 +132,7 @@ func (s *TextureMaterial) AmbientCoeff(vector2 *Vector2) float64 {
 }
 
 func Render(m Material, normal, camera *Vector3, lights []Light, v *Vector3, uv *Vector2) *color.RGBA {
-	ret := &color.RGBA{}
+	ret := ColorScale(m.C(uv), m.AmbientCoeff(uv))
 	for _, l := range lights {
 		lnorm := l.Norm(v)
 		lintense := l.Intensity(v)
@@ -146,8 +148,48 @@ func Render(m Material, normal, camera *Vector3, lights []Light, v *Vector3, uv 
 		}
 		specColor := ColorMult(ColorScale(m.SpecColor(uv), math.Pow(specCos, m.SpecCoeff(uv))), lintense)
 		diffColor := ColorMult(ColorScale(m.C(uv), inc), lintense)
-		ambColor := ColorScale(m.C(uv), m.AmbientCoeff(uv))
-		ret = ColorAdd(ret, ColorAdd(ColorAdd(specColor, diffColor), ambColor))
+		ret = ColorAdd(ret, ColorAdd(specColor, diffColor))	}
+	return ret
+}
+
+func RenderShadow(t *Triangle, env []*Triangle, m Material, normal, camera, v *Vector3, lights []Light, uv *Vector2) *color.RGBA {
+	newenv := ApplyTransform(env, Translate(-v.X, -v.Y, -v.Z ))
+	ret := ColorScale(m.C(uv), m.AmbientCoeff(uv))
+
+
+	for _, l := range lights {
+		shouldrender := true
+		lnorm := l.Norm(v)
+		for i, tri := range newenv {
+			if env[i] == t {
+				continue
+			}
+			intersect := tri.DePerp(lnorm.Dehom()) //interesct is the vector from the surface to the surface in the way of the light
+			if !tri.In(intersect) {
+				continue
+			}
+			lintersect := l.Norm(intersect) //lintersect is the vector from the light to the norm
+			if lintersect.Dot(intersect) < 0 {
+				shouldrender = false
+				break
+			}
+		}
+		if !shouldrender {
+			continue
+		}
+		lintense := l.Intensity(v)
+		inc := -normal.Dot(l.Norm(v))
+		if inc < 0 {
+			inc = 0
+		}
+		reflecc := normal.Scale(2 * normal.Dot(l.Norm(v))).Sub(lnorm)
+		specCos := reflecc.Dot(camera)
+		if specCos < 0 {
+			specCos = 0
+		}
+		specColor := ColorMult(ColorScale(m.SpecColor(uv), math.Pow(specCos, m.SpecCoeff(uv))), lintense)
+		diffColor := ColorMult(ColorScale(m.C(uv), inc), lintense)
+		ret = ColorAdd(ret, ColorAdd(specColor, diffColor))
 	}
 	return ret
 }
@@ -174,8 +216,8 @@ func DrawTrianglesParallel(im *image.RGBA, t []*Triangle, l []Light) {
 			maxx := int(lin(max3(p0.X, p1.X, p2.X), -1, 1, 0, float64(width)))
 			maxy := int(lin(max3(p0.Y, p1.Y, p2.Y), -1, 1, 0, float64(height)))
 
-			for i := maxi(minx, 0); i < mini(maxx+1, width); i++ {
-				for j := maxi(miny, 0); j < mini(maxy+1, height); j++ {
+			for i := maxi(minx-1, 0); i < mini(maxx+1, width); i++ {
+				for j := maxi(miny-1, 0); j < mini(maxy+1, height); j++ {
 					coordx := lin(float64(i), 0, float64(width), -1, 1)
 					coordy := lin(float64(j), 0, float64(height), -1, 1)
 
@@ -185,10 +227,11 @@ func DrawTrianglesParallel(im *image.RGBA, t []*Triangle, l []Light) {
 					}
 					dePerp := tri.DePerp(&Vector2{coordx, coordy})
 					zbuflock[i][j].Lock()
-					if !(zbuf[i][j] == 0 || zbuf[i][j] > dePerp.Z) {
+					if dePerp.Z <=  0 || (zbuf[i][j] != 0 && zbuf[i][j] <= dePerp.Z) {
 						zbuflock[i][j].Unlock()
 						continue
 					}
+
 					zbuf[i][j] = dePerp.Z
 					u, v, w := tri.Bary(dePerp)
 					norm := tri.N0.Scale(u).Add(tri.N1.Scale(v)).Add(tri.N2.Scale(w)).Normalize()
@@ -203,6 +246,64 @@ func DrawTrianglesParallel(im *image.RGBA, t []*Triangle, l []Light) {
 	}
 	wg.Wait()
 }
+
+func DrawTrianglesParallelShadow(im *image.RGBA, t []*Triangle, l []Light) {
+	width := im.Rect.Max.X - im.Rect.Min.X
+	height := im.Rect.Max.Y - im.Rect.Min.Y
+	zbuf := make([][]float64, width, width)
+	zbuflock := make([][]sync.Mutex, width, width)
+	wg := sync.WaitGroup{}
+	for row := range zbuf {
+		zbuf[row] = make([]float64, height, height)
+		zbuflock[row] = make([]sync.Mutex, height, height)
+	}
+	var ct int32
+	for _, tri := range t {
+		wg.Add(1)
+		go func(tri *Triangle) {
+			p0 := tri.P0.Dehom()
+			p1 := tri.P1.Dehom()
+			p2 := tri.P2.Dehom()
+
+			minx := int(lin(min3(p0.X, p1.X, p2.X), -1, 1, 0, float64(width)))
+			miny := int(lin(min3(p0.Y, p1.Y, p2.Y), -1, 1, 0, float64(height)))
+			maxx := int(lin(max3(p0.X, p1.X, p2.X), -1, 1, 0, float64(width)))
+			maxy := int(lin(max3(p0.Y, p1.Y, p2.Y), -1, 1, 0, float64(height)))
+
+			for i := maxi(minx, 0); i < mini(maxx+1, width); i++ {
+				for j := maxi(miny, 0); j < mini(maxy+1, height); j++ {
+					coordx := lin(float64(i), 0, float64(width), -1, 1)
+					coordy := lin(float64(j), 0, float64(height), -1, 1)
+
+					screenCoord := &Vector2{coordx, coordy}
+					dePerp := tri.DePerp(&Vector2{coordx, coordy})
+					if !tri.In(dePerp) {
+						continue
+					}
+
+					zbuflock[i][j].Lock()
+					if dePerp.Z <=  0 || (zbuf[i][j] != 0 && zbuf[i][j] <= dePerp.Z) {
+						zbuflock[i][j].Unlock()
+						continue
+					}
+
+					zbuf[i][j] = dePerp.Z
+					u, v, w := tri.Bary(dePerp)
+					norm := tri.N0.Scale(u).Add(tri.N1.Scale(v)).Add(tri.N2.Scale(w)).Normalize()
+					im.Set(i, j, RenderShadow(tri, t, tri.Material, norm, screenCoord.Hom().Normalize(), dePerp, l, &Vector2{u, v}))
+
+					zbuflock[i][j].Unlock()
+
+				}
+			}
+			fmt.Println(atomic.AddInt32(&ct, 1), "of", len(t))
+			wg.Done()
+		}(tri)
+	}
+	wg.Wait()
+}
+
+
 
 func ColorInterp(c0, c1, c2 *color.RGBA, s0, s1, s2 float64) *color.RGBA {
 	return &color.RGBA{

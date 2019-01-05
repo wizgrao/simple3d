@@ -2,4 +2,4 @@
 Simple 3d rendering in go
 
 
-![Sample Image](/render/out.png)
+![Sample Image](/render/final.png)

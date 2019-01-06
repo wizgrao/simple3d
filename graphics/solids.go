@@ -1,13 +1,12 @@
 package graphics
 
 import (
-	"image/color"
 	"math"
 	"image"
 )
 
 var (
-	White = &color.RGBA{255, 255, 255, 255}
+	White = &Color{255, 255, 255, 255}
 )
 
 func Sphere(subdivisions int) []*Triangle {

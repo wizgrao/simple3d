@@ -2,6 +2,7 @@ package graphics
 
 import (
 	"math"
+	"unsafe"
 )
 
 type Vector4 struct {
@@ -251,13 +252,34 @@ func (m *Mat4) Dot(v *Vector4)  *Vector4 {
 func (v *Vector3) Norm() float64 {
 	return math.Sqrt(v.X*v.X + v.Y*v.Y + v.Z*v.Z)
 }
+func fastInvSqrt(x float64) float64 {
+	xhalf := float64(0.5) * x
+	i := *(*int64)(unsafe.Pointer(&x))
+	i = int64(0x5fe6eb50c7b537a9) - int64(i>>1)
+	x = *(*float64)(unsafe.Pointer(&i))
+	x = x * (1.5 - (xhalf * x * x))
+	return x
+}
+
+func slowInvSqrt(x float64) float64 {
+	return 1/math.Sqrt(x)
+}
+
+func (v *Vector3) FastNormalize() *Vector3 {
+	invNorm := fastInvSqrt(v.X*v.X + v.Y*v.Y + v.Z*v.Z)
+	return &Vector3{
+		X: v.X *invNorm,
+		Y: v.Y * invNorm,
+		Z: v.Z * invNorm,
+	}
+}
 
 func (v *Vector3) Normalize() *Vector3 {
 	norm := v.Norm()
 	return &Vector3{
-		X: v.X / norm,
-		Y: v.Y / norm,
-		Z: v.Z / norm,
+		X: v.X/norm,
+		Y: v.Y /norm,
+		Z: v.Z/norm,
 	}
 }
 
@@ -344,4 +366,3 @@ func ApplyTransform(triangles []*Triangle, mat *Mat4) []*Triangle{
 	}
 	return res
 }
-

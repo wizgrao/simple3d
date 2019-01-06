@@ -2,7 +2,6 @@ package main
 
 import (
 	"image"
-	"image/color"
 	"image/png"
   "image/jpeg"
 	"os"
@@ -26,11 +25,11 @@ var (
 func main() {
 	flag.Parse()
 	im := image.NewRGBA(image.Rect(0, 0, *size, *size))
-	fg := &color.RGBA{255, 255, 255, 255}
-	bg := &color.RGBA{0, 0, 0, 255}
+	fg := &graphics.Color{255, 255, 255, 255}
+	bg := &graphics.Color{0, 0, 0, 255}
 	for i := 0; i < *size; i++ {
 		for j := 0; j < *size; j++ {
-			im.Set(i, j, bg)
+			im.Set(i, j, bg.ToRGBA())
 		}
 	}
   imfile, _ := os.Open("asdf.jpg")

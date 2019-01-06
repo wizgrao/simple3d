@@ -2,7 +2,6 @@ package main
 
 import (
 	"image"
-	"image/color"
 	"image/png"
 	"os"
 	"github.com/wizgrao/simple3d/graphics"
@@ -27,34 +26,34 @@ var (
 func main() {
 	flag.Parse()
 	im := image.NewRGBA(image.Rect(0, 0, *size, *size))
-	fg := &color.RGBA{255, 255, 255, 255}
-	bg := &color.RGBA{0, 0, 0, 255}
+	fg := &graphics.Color{255, 255, 255, 255}
+	bg := &graphics.Color{0, 0, 0, 255}
 
 	m := &graphics.SolidMaterial{
 		Color:         fg,
-		SpecColor_:    &color.RGBA{255, 255, 255, 255},
+		SpecColor_:    &graphics.Color{255, 255, 255, 255},
 		SpecCoeff_:    8,
 		AmbientCoeff_: .01,
 	}
 
 	for i := 0; i < *size; i++ {
 		for j := 0; j < *size; j++ {
-			im.Set(i, j, bg)
+			im.Set(i, j, bg.ToRGBA())
 		}
 	}
 	triangles, _ := graphics.OpenObj(*inputFile, fg)
 
 	lit1 := &graphics.PointLight{
-		Location: &graphics.Vector3{1, -1, 1},
-		R: 1000,
+		Location: &graphics.Vector3{1.5, -1, -0},
+		R: 500,
 	}
 	lit2 := &graphics.PointLight{
-		Location: &graphics.Vector3{-1, -1, 1},
-		B: 1000,
+		Location: &graphics.Vector3{-1.5, -1, -0},
+		B: 500,
 	}
 	lit3 := &graphics.PointLight{
-		Location: &graphics.Vector3{0, -2, -1},
-		G: 1000,
+		Location: &graphics.Vector3{0, -1, -1},
+		G: 500,
 	}
 	/*lit4 := &graphics.DirectionLight{
 		Direction: &graphics.Vector3{0,1, 0},

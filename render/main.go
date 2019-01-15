@@ -1,26 +1,27 @@
 package main
 
 import (
+	"flag"
+	"github.com/wizgrao/simple3d/graphics"
 	"image"
 	"image/png"
-	"os"
-	"github.com/wizgrao/simple3d/graphics"
-	"flag"
 	"math"
+	"os"
+	"fmt"
 )
 
 var (
 	outputFile = flag.String("o", "out.png", "Output File (png)")
-	inputFile = flag.String("i", "in.obj", "Input file (png)")
-	size = flag.Int("s", 2000, "Size of output image")
-	xt = flag.Float64("xt", 0, "Translation in X direction")
-	yt = flag.Float64("yt", 0, "Translation in Y direction")
-	zt = flag.Float64("zt", 1.8, "Translation in Z direction")
-	xr = flag.Float64("xr", 0, "Rotation in X direction")
-	yr = flag.Float64("yr", math.Pi, "Rotation in Y direction")
-	zr = flag.Float64("zr", math.Pi, "Rotation in Z direction")
-	shadow = flag.Bool("h", false, "whether to draw shadows")
-
+	inputFile  = flag.String("i", "in.obj", "Input file (png)")
+	size       = flag.Int("s", 2000, "Size of output image")
+	xt         = flag.Float64("xt", 0, "Translation in X direction")
+	yt         = flag.Float64("yt", 0, "Translation in Y direction")
+	zt         = flag.Float64("zt", 1.8, "Translation in Z direction")
+	xr         = flag.Float64("xr", 0, "Rotation in X direction")
+	yr         = flag.Float64("yr", math.Pi, "Rotation in Y direction")
+	zr         = flag.Float64("zr", math.Pi, "Rotation in Z direction")
+	shadow     = flag.Bool("h", false, "whether to draw shadows")
+	trace     = flag.Bool("t", false, "whether to raytrace")
 )
 
 func main() {
@@ -31,7 +32,7 @@ func main() {
 
 	m := &graphics.SolidMaterial{
 		Color:         fg,
-		SpecColor_:    &graphics.Color{255, 255, 255, 255},
+		SpecColor_:    &graphics.Color{100, 100, 100, 255},
 		SpecCoeff_:    8,
 		AmbientCoeff_: .01,
 	}
@@ -45,15 +46,15 @@ func main() {
 
 	lit1 := &graphics.PointLight{
 		Location: &graphics.Vector3{1.5, -1, -0},
-		R: 500,
+		R:        1000,
 	}
 	lit2 := &graphics.PointLight{
 		Location: &graphics.Vector3{-1.5, -1, -0},
-		B: 500,
+		B:        1000,
 	}
 	lit3 := &graphics.PointLight{
 		Location: &graphics.Vector3{0, -1, -1},
-		G: 500,
+		G:        500,
 	}
 	/*lit4 := &graphics.DirectionLight{
 		Direction: &graphics.Vector3{0,1, 0},
@@ -83,7 +84,11 @@ func main() {
 	if *shadow {
 		fn = graphics.DrawTrianglesParallelShadow
 	}
-	fn(im, triangles, []graphics.Light{lit1, lit2, lit3})
+	if *trace {
+		fn = graphics.DrawTrianglesRayTracer
+	}
+	fmt.Println(lit3)
+	fn(im, triangles, []graphics.Light{lit1, lit2 /*, lit3*/})
 	f, _ := os.Create(*outputFile)
 	png.Encode(f, im)
 }

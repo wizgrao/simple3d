@@ -2,6 +2,7 @@ package graphics
 
 import (
 	"bufio"
+	"fmt"
 	"image"
 	"image/color"
 	"math"
@@ -9,13 +10,13 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"fmt"
 	"sync/atomic"
 )
 
 type Light interface {
 	Norm(*Vector3) *Vector3
 	Intensity(*Vector3) *Color
+	Transform(*Mat4) Light
 }
 
 type Color struct {
@@ -27,10 +28,10 @@ type Color struct {
 
 func (c *Color) ToRGBA() *color.RGBA {
 	return &color.RGBA{
-		R:uint8(max(min(c.R, 255), 0)),
-		G:uint8(max(min(c.G, 255), 0)),
-		B:uint8(max(min(c.B, 255), 0)),
-		A:uint8(max(min(c.A, 255), 0)),
+		R: uint8(max(min(c.R, 255), 0)),
+		G: uint8(max(min(c.G, 255), 0)),
+		B: uint8(max(min(c.B, 255), 0)),
+		A: uint8(max(min(c.A, 255), 0)),
 	}
 }
 
@@ -53,10 +54,19 @@ func (d *PointLight) Norm(v *Vector3) *Vector3 {
 func (d *PointLight) Intensity(v *Vector3) *Color {
 	dist := v.Sub(d.Location).Norm()
 	return &Color{
-		R: d.R/(dist*dist),
-		G: d.G/(dist*dist),
-		B: d.B/(dist*dist),
+		R: d.R / (dist * dist),
+		G: d.G / (dist * dist),
+		B: d.B / (dist * dist),
 		A: 255,
+	}
+}
+
+func (d *PointLight) Transform(m *Mat4) Light {
+	return &PointLight{
+		Location: m.Dot(d.Location.Hom()).Dehom(),
+		R:        d.R,
+		G:        d.G,
+		B:        d.B,
 	}
 }
 
@@ -66,6 +76,13 @@ func (d *DirectionLight) Norm(_ *Vector3) *Vector3 {
 
 func (d *DirectionLight) Intensity(_ *Vector3) *Color {
 	return d.Color
+}
+
+func (d *DirectionLight) Transform(m *Mat4) Light {
+	return &DirectionLight{
+		Direction: m.Dot(d.Direction.Ext()).Dehom(),
+		Color:     d.Color,
+	}
 }
 
 type Material interface {
@@ -127,11 +144,10 @@ func (s *TextureMaterial) C(vec *Vector2) *Color {
 
 }
 
-
-func ToColor(c color.Color) *Color{
+func ToColor(c color.Color) *Color {
 	r, g, b, _ := c.RGBA()
 	return &Color{
-		R:float64(r / 256),
+		R: float64(r / 256),
 		G: float64(g / 256),
 		B: float64(b / 256),
 		A: 255,
@@ -164,14 +180,91 @@ func Render(m Material, normal, camera *Vector3, lights []Light, v *Vector3, uv 
 		}
 		specColor := ColorMult(ColorScale(m.SpecColor(uv), math.Pow(specCos, m.SpecCoeff(uv))), lintense)
 		diffColor := ColorMult(ColorScale(m.C(uv), inc), lintense)
-		ret = ColorAdd(ret, ColorAdd(specColor, diffColor))	}
+		ret = ColorAdd(ret, ColorAdd(specColor, diffColor))
+	}
 	return ret
 }
 
-func RenderShadow(t *Triangle, env []*Triangle, m Material, normal, camera, v *Vector3, lights []Light, uv *Vector2) *Color {
-	newenv := ApplyTransform(env, Translate(-v.X, -v.Y, -v.Z ))
-	ret := ColorScale(m.C(uv), m.AmbientCoeff(uv))
+var zero = &Vector3{}
 
+func GetSpecularShadow(env []*Triangle, m Material, normal *Vector3, lights []Light, uv *Vector2) *Color {
+	ret := ColorScale(m.C(uv), m.AmbientCoeff(uv))
+	for _, l := range lights {
+		shouldrender := true
+		lnorm := l.Norm(zero)
+		for _, tri := range env {
+			intersect := tri.DePerp(lnorm.Dehom()) //interesct is the vector from the surface to the surface in the way of the light
+			if !tri.In(intersect) || intersect.Norm() < .001 {
+				continue
+			}
+			lintersect := l.Norm(intersect) //lintersect is the vector from the light to the norm
+			if lintersect.Dot(intersect) < 0 {
+				shouldrender = false
+				break
+			}
+		}
+		if !shouldrender {
+			continue
+		}
+		lintense := l.Intensity(zero)
+		inc := -normal.Dot(l.Norm(zero))
+		if inc < 0 {
+			inc = 0
+		}
+		diffColor := ColorMult(ColorScale(m.C(uv), inc), lintense)
+
+
+		ret = ColorAdd(ret, diffColor)
+	}
+	return ret
+}
+
+func RayCast(env []*Triangle, lights []Light, vec *Vector3, bounce int) *Color {
+	var mindist float64
+	var mintriangle *Triangle
+	var minInteresction *Vector3
+	for _, t := range env {
+		intersection := t.RayIntersect(vec)
+		if !t.In(intersection) {
+			continue
+		}
+		dist := intersection.Dot(vec)
+		if dist < 0.1 {
+			continue
+		}
+		if mindist == 0 || dist < mindist {
+			mindist = dist
+			mintriangle = t
+			minInteresction = intersection
+		}
+	}
+	if mintriangle == nil {
+		return &Color{
+			A: 255,
+		}
+	}
+
+	u, v, w := mintriangle.Bary(minInteresction)
+	norm := mintriangle.N0.Scale(u).Add(mintriangle.N1.Scale(v)).Add(mintriangle.N2.Scale(w)).Normalize()
+	reflect := minInteresction.Sub(norm.Scale(2 * norm.Dot(minInteresction))).Normalize()
+	newLights := make([]Light, len(lights))
+	transform := Translate(-minInteresction.X, -minInteresction.Y, -minInteresction.Z)
+	for i, light := range lights {
+		newLights[i] = light.Transform(transform)
+	}
+	uv := &Vector2{u, v}
+	newEnv := ApplyTransform(env, transform)
+	c := GetSpecularShadow(newEnv, mintriangle.Material, norm, newLights, uv)
+	if bounce > 0 {
+		c = ColorAdd(c, ColorMult(RayCast(newEnv, newLights, reflect, bounce-1), mintriangle.Material.SpecColor(uv)))
+	}
+	return c
+
+}
+
+func RenderShadow(t *Triangle, env []*Triangle, m Material, normal, camera, v *Vector3, lights []Light, uv *Vector2) *Color {
+	newenv := ApplyTransform(env, Translate(-v.X, -v.Y, -v.Z))
+	ret := ColorScale(m.C(uv), m.AmbientCoeff(uv))
 
 	for _, l := range lights {
 		shouldrender := true
@@ -243,7 +336,7 @@ func DrawTrianglesParallel(im *image.RGBA, t []*Triangle, l []Light) {
 					}
 					dePerp := tri.DePerp(&Vector2{coordx, coordy})
 					zbuflock[i][j].Lock()
-					if dePerp.Z <=  0 || (zbuf[i][j] != 0 && zbuf[i][j] <= dePerp.Z) {
+					if dePerp.Z <= 0 || (zbuf[i][j] != 0 && zbuf[i][j] <= dePerp.Z) {
 						zbuflock[i][j].Unlock()
 						continue
 					}
@@ -296,7 +389,7 @@ func DrawTrianglesParallelFaster(im *image.RGBA, t []*Triangle, l []Light) {
 					}
 					dePerp := tri.DePerp(&Vector2{coordx, coordy})
 					zbuflock[i][j].Lock()
-					if dePerp.Z <=  0 || (zbuf[i][j] != 0 && zbuf[i][j] <= dePerp.Z) {
+					if dePerp.Z <= 0 || (zbuf[i][j] != 0 && zbuf[i][j] <= dePerp.Z) {
 						zbuflock[i][j].Unlock()
 						continue
 					}
@@ -314,7 +407,6 @@ func DrawTrianglesParallelFaster(im *image.RGBA, t []*Triangle, l []Light) {
 	}
 	wg.Wait()
 }
-
 
 func DrawTrianglesParallelShadow(im *image.RGBA, t []*Triangle, l []Light) {
 	width := im.Rect.Max.X - im.Rect.Min.X
@@ -351,7 +443,7 @@ func DrawTrianglesParallelShadow(im *image.RGBA, t []*Triangle, l []Light) {
 					}
 
 					zbuflock[i][j].Lock()
-					if dePerp.Z <=  0 || (zbuf[i][j] != 0 && zbuf[i][j] <= dePerp.Z) {
+					if dePerp.Z <= 0 || (zbuf[i][j] != 0 && zbuf[i][j] <= dePerp.Z) {
 						zbuflock[i][j].Unlock()
 						continue
 					}
@@ -360,7 +452,6 @@ func DrawTrianglesParallelShadow(im *image.RGBA, t []*Triangle, l []Light) {
 					u, v, w := tri.Bary(dePerp)
 					norm := tri.N0.Scale(u).Add(tri.N1.Scale(v)).Add(tri.N2.Scale(w)).Normalize()
 					im.Set(i, j, RenderShadow(tri, t, tri.Material, norm, screenCoord.Hom().Normalize(), dePerp, l, &Vector2{u, v}).ToRGBA())
-
 					zbuflock[i][j].Unlock()
 
 				}
@@ -372,8 +463,27 @@ func DrawTrianglesParallelShadow(im *image.RGBA, t []*Triangle, l []Light) {
 	wg.Wait()
 }
 
+func DrawTrianglesRayTracer(im *image.RGBA, t []*Triangle, l []Light) {
+	width := im.Rect.Max.X - im.Rect.Min.X
+	height := im.Rect.Max.Y - im.Rect.Min.Y
+	wg := sync.WaitGroup{}
+	for i := 0; i < width; i++ {
+		for j := 0; j < height; j++ {
+			wg.Add(1)
+			go func(i, j int) {
+				coordx := lin(float64(i), 0, float64(width), -1, 1)
+				coordy := lin(float64(j), 0, float64(height), -1, 1)
 
+				screenCoord := &Vector2{coordx, coordy}
+				im.Set(i, j, RayCast(t, l, screenCoord.Hom().Normalize(), 1).ToRGBA())
+				wg.Done()
+				fmt.Println(i, j)
+			}(i, j)
 
+		}
+	}
+	wg.Wait()
+}
 func ColorInterp(c0, c1, c2 *Color, s0, s1, s2 float64) *Color {
 	return &Color{
 		R: c0.R*s0 + c1.R*s1 + c2.R*s2,
@@ -403,15 +513,12 @@ func ColorMult(c0, c1 *Color) *Color {
 
 func ColorScale(c *Color, s float64) *Color {
 	return &Color{
-		R: c.R*s,
-		G: c.G*s,
-		B: c.B*s,
+		R: c.R * s,
+		G: c.G * s,
+		B: c.B * s,
 		A: c.A,
 	}
 }
-
-
-
 
 func OpenObj(filename string, rgba *Color) ([]*Triangle, error) {
 	f, err := os.Open(filename)
@@ -489,7 +596,7 @@ func OpenObj(filename string, rgba *Color) ([]*Triangle, error) {
 			znn, _ := strconv.ParseInt(zn, 10, 32)
 			t := NewTriangle(points[x-1], points[y-1], points[z-1], &SolidMaterial{
 				Color:         rgba,
-				SpecColor_:    &Color{255, 255, 255, 255},
+				SpecColor_:    &Color{10, 10, 10, 255},
 				SpecCoeff_:    8,
 				AmbientCoeff_: .01,
 			})

@@ -13,30 +13,30 @@ type Mat4 struct {
 	X []float64
 }
 
-func (m *Mat4)At(i, j int) float64{
-	return m.X[i*4 + j]
+func (m *Mat4) At(i, j int) float64 {
+	return m.X[i*4+j]
 }
 
-func (m *Mat4)Set(i, j int, val float64) {
-	m.X[i*4 + j] = val
+func (m *Mat4) Set(i, j int, val float64) {
+	m.X[i*4+j] = val
 }
 
-func NewMat4() *Mat4{
+func NewMat4() *Mat4 {
 	m := Mat4{}
 	m.X = make([]float64, 16, 16)
-	for i:=0; i < 16; i+= 5 {
+	for i := 0; i < 16; i += 5 {
 		m.X[i] = 1
 	}
 	return &m
 }
 
-func (m *Mat4) Mult (n *Mat4)  *Mat4{
+func (m *Mat4) Mult(n *Mat4) *Mat4 {
 	res := NewMat4()
-	for i:=0; i < 4; i++ {
-		for j:= 0; j < 4; j++ {
+	for i := 0; i < 4; i++ {
+		for j := 0; j < 4; j++ {
 			var sum float64
-			for k :=0; k < 4; k++ {
-				sum += m.At(i, k)*n.At(k, j)
+			for k := 0; k < 4; k++ {
+				sum += m.At(i, k) * n.At(k, j)
 			}
 			res.Set(i, j, sum)
 		}
@@ -101,8 +101,6 @@ func Translate(x, y, z float64) *Mat4 {
 	return res
 }
 
-
-
 type Vector3 struct {
 	X float64
 	Y float64
@@ -114,35 +112,33 @@ type Vector2 struct {
 	Y float64
 }
 
-func (v *Vector2) Hom() *Vector3{
+func (v *Vector2) Hom() *Vector3 {
 	return &Vector3{
-		X:v.X,
-		Y:v.Y,
-		Z:1,
+		X: v.X,
+		Y: v.Y,
+		Z: 1,
 	}
 }
 
 type Triangle struct {
-	P0   *Vector3
-	P1   *Vector3
-	P2   *Vector3
-	N0   *Vector3
-	N1   *Vector3
-	N2   *Vector3
+	P0 *Vector3
+	P1 *Vector3
+	P2 *Vector3
+	N0 *Vector3
+	N1 *Vector3
+	N2 *Vector3
 
 	Norm *Vector3
 	Material
-
 }
 
 func (t *Triangle) DePerp(v *Vector2) *Vector3 {
 	d := t.Norm.Dot(t.P0) //ax + by + cz = d
 	vhom := v.Hom()
 	coeff := vhom.Dot(t.Norm)
-	z := d/coeff
+	z := d / coeff
 	return vhom.Scale(z)
 }
-
 
 func (v *Vector3) Dehom() *Vector2 {
 	return &Vector2{
@@ -150,8 +146,6 @@ func (v *Vector3) Dehom() *Vector2 {
 		Y: v.Y / v.Z,
 	}
 }
-
-
 
 func (v *Vector3) Hom() *Vector4 {
 	return &Vector4{
@@ -167,12 +161,11 @@ func (v *Vector3) Ext() *Vector4 {
 
 func (v *Vector4) Dehom() *Vector3 {
 	return &Vector3{
-		X: v.X[0]/v.X[3],
-		Y: v.X[1]/v.X[3],
-		Z: v.X[2]/v.X[3],
+		X: v.X[0] / v.X[3],
+		Y: v.X[1] / v.X[3],
+		Z: v.X[2] / v.X[3],
 	}
 }
-
 
 func (v *Vector4) Unex() *Vector3 {
 	return &Vector3{
@@ -181,8 +174,6 @@ func (v *Vector4) Unex() *Vector3 {
 		Z: v.X[2],
 	}
 }
-
-
 
 func (t *Triangle) Centroid() *Vector3 {
 	return t.P0.Add(t.P1).Add(t.P2).Scale(1.0 / 3.0)
@@ -237,38 +228,40 @@ func Cross(v1, v2 *Vector3) *Vector3 {
 	}
 }
 
-func (m *Mat4) Dot(v *Vector4)  *Vector4 {
-	x := make([]float64 , 4, 4)
-	for i:=0; i < 4; i++ {
+func (m *Mat4) Dot(v *Vector4) *Vector4 {
+	x := make([]float64, 4, 4)
+	for i := 0; i < 4; i++ {
 		var sum float64
-		for j:=0; j<4; j++ {
+		for j := 0; j < 4; j++ {
 			sum += m.At(i, j) * v.X[j]
 		}
 		x[i] = sum
 	}
-	return &Vector4{X:x}
+	return &Vector4{X: x}
 }
 
 func (v *Vector3) Norm() float64 {
 	return math.Sqrt(v.X*v.X + v.Y*v.Y + v.Z*v.Z)
 }
 func fastInvSqrt(x float64) float64 {
-	xhalf := float64(0.5) * x
+	xhalf := 0.5 * x
 	i := *(*int64)(unsafe.Pointer(&x))
 	i = int64(0x5fe6eb50c7b537a9) - int64(i>>1)
 	x = *(*float64)(unsafe.Pointer(&i))
 	x = x * (1.5 - (xhalf * x * x))
 	return x
+
 }
 
+
 func slowInvSqrt(x float64) float64 {
-	return 1/math.Sqrt(x)
+	return 1 / math.Sqrt(x)
 }
 
 func (v *Vector3) FastNormalize() *Vector3 {
 	invNorm := fastInvSqrt(v.X*v.X + v.Y*v.Y + v.Z*v.Z)
 	return &Vector3{
-		X: v.X *invNorm,
+		X: v.X * invNorm,
 		Y: v.Y * invNorm,
 		Z: v.Z * invNorm,
 	}
@@ -277,9 +270,9 @@ func (v *Vector3) FastNormalize() *Vector3 {
 func (v *Vector3) Normalize() *Vector3 {
 	norm := v.Norm()
 	return &Vector3{
-		X: v.X/norm,
-		Y: v.Y /norm,
-		Z: v.Z/norm,
+		X: v.X / norm,
+		Y: v.Y / norm,
+		Z: v.Z / norm,
 	}
 }
 
@@ -298,14 +291,12 @@ func (v *Vector2) Scale(s float64) *Vector2 {
 	}
 }
 
-
-
 func CalcNorm(p0, p1, p2 *Vector3) *Vector3 {
 	res := Cross(p0.Sub(p1), p0.Sub(p2)).Normalize()
 	return res
 }
 
-func (t *Triangle) Bary(v *Vector3)  (float64, float64, float64) {
+func (t *Triangle) Bary(v *Vector3) (float64, float64, float64) {
 	t1 := (&Triangle{
 		P0: v,
 		P1: t.P1,
@@ -322,33 +313,32 @@ func (t *Triangle) Bary(v *Vector3)  (float64, float64, float64) {
 		P2: v,
 	}).Area()
 	a := t.Area()
-	return t1/a, t2/a, t3/a
+	return t1 / a, t2 / a, t3 / a
 }
 
 func (t *Triangle) Area() float64 {
-	return Cross(t.P0.Sub(t.P1), t.P0.Sub(t.P2)).Norm()*0.5
+	return Cross(t.P0.Sub(t.P1), t.P0.Sub(t.P2)).Norm() * 0.5
 }
 
-func (t *Triangle) In(vx *Vector3) bool{
+func (t *Triangle) In(vx *Vector3) bool {
 	u, v, w := t.Bary(vx)
-	return u + v + w <= 1.0001
+	return u+v+w <= 1.001
 }
 func NewTriangle(p0, p1, p2 *Vector3, m Material) *Triangle {
 	norm := CalcNorm(p0, p1, p2)
 	return &Triangle{
-		P0:   p0,
-		P1:   p1,
-		P2:   p2,
-		Norm: norm,
-		Material:   m,
-		N0: norm,
-		N1: norm,
-		N2: norm,
+		P0:       p0,
+		P1:       p1,
+		P2:       p2,
+		Norm:     norm,
+		Material: m,
+		N0:       norm,
+		N1:       norm,
+		N2:       norm,
 	}
 }
 
-
-func ApplyTransform(triangles []*Triangle, mat *Mat4) []*Triangle{
+func ApplyTransform(triangles []*Triangle, mat *Mat4) []*Triangle {
 	res := make([]*Triangle, len(triangles), len(triangles))
 	for i, t := range triangles {
 		res[i] = NewTriangle(
@@ -361,8 +351,9 @@ func ApplyTransform(triangles []*Triangle, mat *Mat4) []*Triangle{
 		res[i].N1 = mat.Dot(t.N1.Ext()).Unex()
 		res[i].N2 = mat.Dot(t.N2.Ext()).Unex()
 
-
-
 	}
 	return res
+}
+func (t *Triangle) RayIntersect (vector3 *Vector3) *Vector3{
+	return t.DePerp(vector3.Dehom())
 }

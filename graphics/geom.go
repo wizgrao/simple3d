@@ -74,6 +74,7 @@ func RotY(theta float64) *Mat4 {
 	return res
 }
 
+
 func RotX(theta float64) *Mat4 {
 	c := math.Cos(theta)
 	s := math.Sin(theta)
@@ -96,6 +97,18 @@ func Translate(x, y, z float64) *Mat4 {
 		1, 0, 0, x,
 		0, 1, 0, y,
 		0, 0, 1, z,
+		0, 0, 0, 1,
+	}
+	return res
+}
+
+func Scale(x float64) *Mat4 {
+	res := NewMat4()
+
+	res.X = []float64{
+		x, 0, 0, 0,
+		0, x, 0, 0,
+		0, 0, x, 0,
 		0, 0, 0, 1,
 	}
 	return res
@@ -347,9 +360,9 @@ func ApplyTransform(triangles []*Triangle, mat *Mat4) []*Triangle {
 			mat.Dot(t.P2.Hom()).Dehom(),
 			t.Material,
 		)
-		res[i].N0 = mat.Dot(t.N0.Ext()).Unex()
-		res[i].N1 = mat.Dot(t.N1.Ext()).Unex()
-		res[i].N2 = mat.Dot(t.N2.Ext()).Unex()
+		res[i].N0 = mat.Dot(t.N0.Ext()).Unex().Normalize()
+		res[i].N1 = mat.Dot(t.N1.Ext()).Unex().Normalize()
+		res[i].N2 = mat.Dot(t.N2.Ext()).Unex().Normalize()
 
 	}
 	return res

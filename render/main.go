@@ -7,7 +7,7 @@ import (
 	"image/png"
 	"math"
 	"os"
-	"fmt"
+	"github.com/wizgrao/blow/maps"
 )
 
 var (
@@ -22,17 +22,21 @@ var (
 	zr         = flag.Float64("zr", math.Pi, "Rotation in Z direction")
 	shadow     = flag.Bool("h", false, "whether to draw shadows")
 	trace     = flag.Bool("t", false, "whether to raytrace")
+	bounces = flag.Int("b", 3, "number of bounces on the ray tracer")
+	circles = flag.Bool("circles", false, "draw alternate scene")
+	grey = flag.Bool("g", false, "use white lighting instead of colored")
+	parallel = flag.Int("p", 16, "number of parallel goroutines to use for rendering")
 )
 
 func main() {
 	flag.Parse()
 	im := image.NewRGBA(image.Rect(0, 0, *size, *size))
-	fg := &graphics.Color{255, 255, 255, 255}
+	fg := &graphics.Color{100, 100, 100, 255}
 	bg := &graphics.Color{0, 0, 0, 255}
 
 	m := &graphics.SolidMaterial{
 		Color:         fg,
-		SpecColor_:    &graphics.Color{100, 100, 100, 255},
+		SpecColor_:    &graphics.Color{150, 150, 150, 255},
 		SpecCoeff_:    8,
 		AmbientCoeff_: .01,
 	}
@@ -46,15 +50,22 @@ func main() {
 
 	lit1 := &graphics.PointLight{
 		Location: &graphics.Vector3{1.5, -1, -0},
-		R:        1000,
+		R:        500,
 	}
 	lit2 := &graphics.PointLight{
 		Location: &graphics.Vector3{-1.5, -1, -0},
-		B:        1000,
+		B:        500,
 	}
 	lit3 := &graphics.PointLight{
 		Location: &graphics.Vector3{0, -1, -1},
 		G:        500,
+	}
+
+	if *grey {
+		lit1.G =  500
+		lit1.B = 500
+		lit2.G =  500
+		lit2.R = 500
 	}
 	/*lit4 := &graphics.DirectionLight{
 		Direction: &graphics.Vector3{0,1, 0},
@@ -79,16 +90,45 @@ func main() {
 	t2.N0 = n
 	t2.N1 = n
 	t2.N2 = n
-	triangles = append(triangles, t1, t2)
-	fn := graphics.DrawTrianglesParallel
+
+	if *circles {
+		r := .5
+		c1 := graphics.ApplyTransform(graphics.SphereMat(50, m),graphics.Translate(-r, 0, 0).Mult(graphics.Scale(r)))
+		c2 := graphics.ApplyTransform(c1,graphics.Translate(2*r, 0, 0))
+		mesh := append(c1, c2...)
+		mesh = graphics.ApplyTransform(mesh, graphics.Translate(0, r, 1.5))
+		triangles = append(mesh, t1, t2)
+		asdf := graphics.RotX(math.Pi/8)
+		_ = asdf
+		triangles = graphics.ApplyTransform(triangles, asdf)
+
+	}else {
+		triangles = append(triangles, t1, t2)
+	}
+
+
 	if *shadow {
-		fn = graphics.DrawTrianglesParallelShadow
+		_ = lit3
+		graphics.DrawTrianglesParallelShadow(im, triangles, []graphics.Light{lit1, lit2 /*, lit3*/})
 	}
 	if *trace {
-		fn = graphics.DrawTrianglesRayTracer
+		source := &graphics.PixelSource{im}
+		mapper := &graphics.RayTraceMapper{
+			Bounces: *bounces,
+			Width: *size,
+			Height: *size,
+			XMin: -1,
+			XMax: 1,
+			YMin:-1,
+			YMax: 1,
+			Mesh: triangles,
+			Lights:[]graphics.Light{lit1, lit2},
+		}
+		writer := &graphics.WriterMapper{im, 0, *size * *size}
+		maps.GeneratorSource(source, nil).MapLocalParallel(mapper, *parallel).MapLocal(writer).Sink()
+	}else {
+		graphics.DrawTrianglesParallel(im, triangles, []graphics.Light{lit1, lit2 /*, lit3*/})
 	}
-	fmt.Println(lit3)
-	fn(im, triangles, []graphics.Light{lit1, lit2 /*, lit3*/})
 	f, _ := os.Create(*outputFile)
 	png.Encode(f, im)
 }

@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"github.com/wizgrao/blow/maps"
+	"encoding/json"
 )
 
 type Light interface {
@@ -24,6 +26,94 @@ type Color struct {
 	G float64
 	B float64
 	A float64
+}
+
+type Pixel struct {
+	I int
+	J int
+	C *Color
+}
+
+
+func (p *Pixel) Key() int {
+	return p.I + p.J
+}
+
+type WriterMapper struct {
+	*image.RGBA
+	Ct int
+	Max int
+}
+
+func (w *WriterMapper) Do(pix maps.Keyed, outchan chan<- maps.Keyed) {
+	pixel := pix.(*Pixel)
+	w.Set(pixel.I, pixel.J, pixel.C.ToRGBA())
+	w.Ct ++
+	fmt.Printf("\r %d of %d (%d%%)", w.Ct, w.Max, int(100*float64(w.Ct)/float64(w.Max)))
+}
+
+type RayTraceMapper struct {
+	Bounces int
+	Width int
+	Height int
+	XMin float64
+	XMax float64
+	YMin float64
+	YMax float64
+
+	Lights []Light
+	Mesh []*Triangle
+}
+
+func (r *RayTraceMapper) Do(k maps.Keyed, outchan chan<- maps.Keyed) {
+	pixel := k.(*Pixel)
+	coordx := lin(float64(pixel.I), 0, float64(r.Width), r.XMin, r.XMax)
+	coordy := lin(float64(pixel.J), 0, float64(r.Height), r.YMin, r.YMax)
+
+	screenCoord := &Vector2{coordx, coordy}
+	homCoords := screenCoord.Hom()
+	outchan <- &Pixel{
+		I: pixel.I,
+		J: pixel.J,
+		C: RayCast(r.Mesh, r.Lights, homCoords, r.Bounces),
+	}
+}
+
+func (*RayTraceMapper) InEncoder() maps.Encoder {
+	return &PixelEncoder{}
+}
+func (*RayTraceMapper) OutEncoder() maps.Encoder {
+	return &PixelEncoder{}
+}
+func (*RayTraceMapper) ID() string {
+	return "rayTraceMapper"
+}
+type PixelEncoder struct {}
+
+func (*PixelEncoder) Marshal(k maps.Keyed) ([]byte, error) {
+	return json.Marshal(k.(*Pixel))
+}
+func (*PixelEncoder) UnMarshal(dat []byte) (maps.Keyed, error) {
+	p := &Pixel{}
+	err := json.Unmarshal(dat, p)
+	return p, err
+}
+
+type PixelSource struct {
+	*image.RGBA
+}
+
+func (p *PixelSource) Do (outchan chan<- maps.Keyed) {
+	width := p.Rect.Max.X - p.Rect.Min.X
+	height := p.Rect.Max.Y - p.Rect.Min.Y
+	for i := 0; i < width; i++ {
+		for j := 0; j < height; j ++ {
+			outchan<- &Pixel{
+				I: i,
+				J: j,
+			}
+		}
+	}
 }
 
 func (c *Color) ToRGBA() *color.RGBA {
@@ -187,7 +277,7 @@ func Render(m Material, normal, camera *Vector3, lights []Light, v *Vector3, uv 
 
 var zero = &Vector3{}
 
-func GetSpecularShadow(env []*Triangle, m Material, normal *Vector3, lights []Light, uv *Vector2) *Color {
+func GetSpecularShadow(env []*Triangle, m Material, camera, normal *Vector3, lights []Light, uv *Vector2) *Color {
 	ret := ColorScale(m.C(uv), m.AmbientCoeff(uv))
 	for _, l := range lights {
 		shouldrender := true
@@ -212,9 +302,15 @@ func GetSpecularShadow(env []*Triangle, m Material, normal *Vector3, lights []Li
 			inc = 0
 		}
 		diffColor := ColorMult(ColorScale(m.C(uv), inc), lintense)
-
+		reflecc := normal.Scale(2 * normal.Dot(l.Norm(zero))).Sub(lnorm)
+		specCos := reflecc.Dot(camera)
+		if specCos < 0 {
+			specCos = 0
+		}
+		specColor := ColorMult(ColorScale(m.SpecColor(uv), math.Pow(specCos, m.SpecCoeff(uv))), lintense)
 
 		ret = ColorAdd(ret, diffColor)
+		ret = ColorAdd(ret, specColor)
 	}
 	return ret
 }
@@ -254,7 +350,7 @@ func RayCast(env []*Triangle, lights []Light, vec *Vector3, bounce int) *Color {
 	}
 	uv := &Vector2{u, v}
 	newEnv := ApplyTransform(env, transform)
-	c := GetSpecularShadow(newEnv, mintriangle.Material, norm, newLights, uv)
+	c := GetSpecularShadow(newEnv, mintriangle.Material, vec.Normalize(), norm, newLights, uv)
 	if bounce > 0 {
 		c = ColorAdd(c, ColorMult(RayCast(newEnv, newLights, reflect, bounce-1), mintriangle.Material.SpecColor(uv)))
 	}
@@ -644,20 +740,6 @@ func max(x, y float64) float64 {
 
 func maxi(x, y int) int {
 	if x > y {
-		return x
-	}
-	return y
-}
-
-func maxu(x, y uint8) uint8 {
-	if x > y {
-		return x
-	}
-	return y
-}
-
-func minu(x, y uint8) uint8 {
-	if x < y {
 		return x
 	}
 	return y

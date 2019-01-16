@@ -70,6 +70,61 @@ func Sphere(subdivisions int) []*Triangle {
 	return ret
 }
 
+func SphereMat(subdivisions int, mat Material) []*Triangle {
+	ret := make([]*Triangle, 0)
+	pts := make([][]*Vector3, subdivisions-1)
+	for i := range pts {
+		pts[i] = make([]*Vector3, subdivisions*2)
+		theta := math.Pi * (-0.5*float64(subdivisions) + 1.0 + float64(i)) / float64(subdivisions)
+		y := math.Sin(theta)
+		radius := math.Cos(theta)
+		for j := range pts[i] {
+			phi := math.Pi * float64(j) / float64(subdivisions)
+			x := math.Cos(phi) * radius
+			z := math.Sin(phi) * radius
+			pts[i][j] = &Vector3{x, y, z}
+		}
+		if i == 0 {
+
+			continue
+		}
+		for j := range pts[i] {
+			l := (2*subdivisions + j - 1) % (2 * subdivisions)
+			r := j
+			t := i
+			b := i - 1
+
+			t1 := NewTriangle(pts[t][l], pts[t][r], pts[b][l], mat)
+			t1.N0 = pts[t][l]
+			t1.N1 = pts[t][r]
+			t1.N2 = pts[b][l]
+			t2 := NewTriangle(pts[b][r], pts[t][r], pts[b][l], mat)
+			t2.N0 = pts[b][r]
+			t2.N1 = pts[t][r]
+			t2.N2 = pts[b][l]
+
+			ret = append(ret, t1, t2)
+		}
+	}
+	i := 0
+	for j := range pts[i] {
+		l := (2*subdivisions + j - 1) % (2 * subdivisions)
+		r := j
+		top := subdivisions - 2
+		t1 := NewTriangle(pts[i][l], pts[i][r], &Vector3{0, -1, 0}, mat)
+		t1.N0 = pts[i][l]
+		t1.N1 = pts[i][r]
+		t1.N2 = &Vector3{0, -1, 0}
+		t2 := NewTriangle(pts[top][l], pts[top][r], &Vector3{0, 1, 0}, mat)
+		t2.N0 = pts[top][l]
+		t2.N1 = pts[top][r]
+		t2.N2 = &Vector3{0, 1, 0}
+		ret = append(ret, t1, t2)
+
+	}
+	return ret
+}
+
 func ImgSphere(subdivisions int, im image.Image) []*Triangle {
 	ret := make([]*Triangle, 0)
 	pts := make([][]*Vector3, subdivisions-1)

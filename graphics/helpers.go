@@ -38,11 +38,11 @@ type Portion struct {
 	MinX int
 	MinY int
 	MaxX int
-	maxY int
+	MaxY int
 }
 
 func (p *Portion) Key() int {
-	return p.MinX + p.MinY + p.MaxX +p.maxY
+	return p.MinX + p.MinY + p.MaxX +p.MaxY
 }
 
 
@@ -78,8 +78,9 @@ type RayTraceMapper struct {
 
 func (r *RayTraceMapper) Do(k maps.Keyed, outchan chan<- maps.Keyed) {
 	portion := k.(*Portion)
+	fmt.Println("\n",portion)
 	for i:= portion.MinX; i < portion.MaxX; i ++ {
-		for j := portion.MinY; i < portion.maxY; j ++ {
+		for j := portion.MinY; j < portion.MaxY; j ++ {
 			coordx := lin(float64(i), 0, float64(r.Width), r.XMin, r.XMax)
 			coordy := lin(float64(j), 0, float64(r.Height), r.YMin, r.YMax)
 
@@ -142,7 +143,7 @@ func (p *PixelSource) Do (outchan chan<- maps.Keyed) {
 				MinX: i,
 				MinY: j,
 				MaxX: i+p.Stride,
-				maxY: j+p.Stride,
+				MaxY: j+p.Stride,
 			}
 		}
 		if j == height {
@@ -152,7 +153,7 @@ func (p *PixelSource) Do (outchan chan<- maps.Keyed) {
 			MinX: i,
 			MinY: j,
 			MaxX: i+p.Stride,
-			maxY: height,
+			MaxY: height,
 		}
 	}
 	if i == width {
@@ -165,7 +166,7 @@ func (p *PixelSource) Do (outchan chan<- maps.Keyed) {
 			MinX: i,
 			MinY: j,
 			MaxX: width,
-			maxY: j+p.Stride,
+			MaxY: j+p.Stride,
 		}
 	}
 	if j == height {
@@ -175,7 +176,7 @@ func (p *PixelSource) Do (outchan chan<- maps.Keyed) {
 		MinX: i,
 		MinY: j,
 		MaxX: width,
-		maxY: height,
+		MaxY: height,
 	}
 
 }

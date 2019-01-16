@@ -112,7 +112,6 @@ func main() {
 		mesh = graphics.ApplyTransform(mesh, graphics.Translate(0, r, 1.5))
 		triangles = append(mesh, t1, t2)
 		asdf := graphics.RotX(math.Pi/8)
-		_ = asdf
 		triangles = graphics.ApplyTransform(triangles, asdf)
 
 	}else {

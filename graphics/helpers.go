@@ -34,6 +34,17 @@ type Pixel struct {
 	C *Color
 }
 
+type Portion struct {
+	MinX int
+	MinY int
+	MaxX int
+	maxY int
+}
+
+func (p *Portion) Key() int {
+	return p.MinX + p.MinY + p.MaxX +p.maxY
+}
+
 
 func (p *Pixel) Key() int {
 	return p.I + p.J
@@ -66,21 +77,26 @@ type RayTraceMapper struct {
 }
 
 func (r *RayTraceMapper) Do(k maps.Keyed, outchan chan<- maps.Keyed) {
-	pixel := k.(*Pixel)
-	coordx := lin(float64(pixel.I), 0, float64(r.Width), r.XMin, r.XMax)
-	coordy := lin(float64(pixel.J), 0, float64(r.Height), r.YMin, r.YMax)
+	portion := k.(*Portion)
+	for i:= portion.MinX; i < portion.MaxX; i ++ {
+		for j := portion.MinY; i < portion.maxY; j ++ {
+			coordx := lin(float64(i), 0, float64(r.Width), r.XMin, r.XMax)
+			coordy := lin(float64(j), 0, float64(r.Height), r.YMin, r.YMax)
 
-	screenCoord := &Vector2{coordx, coordy}
-	homCoords := screenCoord.Hom()
-	outchan <- &Pixel{
-		I: pixel.I,
-		J: pixel.J,
-		C: RayCast(r.Mesh, r.Lights, homCoords, r.Bounces),
+			screenCoord := &Vector2{coordx, coordy}
+			homCoords := screenCoord.Hom()
+			outchan <- &Pixel{
+				I: i,
+				J: j,
+				C: RayCast(r.Mesh, r.Lights, homCoords, r.Bounces),
+			}
+		}
 	}
+
 }
 
 func (*RayTraceMapper) InEncoder() maps.Encoder {
-	return &PixelEncoder{}
+	return &PortionEncoder{}
 }
 func (*RayTraceMapper) OutEncoder() maps.Encoder {
 	return &PixelEncoder{}
@@ -99,21 +115,69 @@ func (*PixelEncoder) UnMarshal(dat []byte) (maps.Keyed, error) {
 	return p, err
 }
 
+type PortionEncoder struct {}
+
+func (*PortionEncoder) Marshal(k maps.Keyed) ([]byte, error) {
+	return json.Marshal(k.(*Portion))
+}
+func (*PortionEncoder) UnMarshal(dat []byte) (maps.Keyed, error) {
+	p := &Portion{}
+	err := json.Unmarshal(dat, p)
+	return p, err
+}
+
 type PixelSource struct {
+	Stride int
 	*image.RGBA
 }
 
 func (p *PixelSource) Do (outchan chan<- maps.Keyed) {
 	width := p.Rect.Max.X - p.Rect.Min.X
 	height := p.Rect.Max.Y - p.Rect.Min.Y
-	for i := 0; i < width; i++ {
-		for j := 0; j < height; j ++ {
-			outchan<- &Pixel{
-				I: i,
-				J: j,
+	var i int
+	for i = 0; i <= width-p.Stride; i+=p.Stride {
+		var j int
+		for j = 0; j <= height-p.Stride; j +=p.Stride {
+			outchan<- &Portion{
+				MinX: i,
+				MinY: j,
+				MaxX: i+p.Stride,
+				maxY: j+p.Stride,
 			}
 		}
+		if j == height {
+			continue
+		}
+		outchan<-  &Portion{
+			MinX: i,
+			MinY: j,
+			MaxX: i+p.Stride,
+			maxY: height,
+		}
 	}
+	if i == width {
+		return
+	}
+
+	var j int
+	for j = 0; j <= height-p.Stride; j +=p.Stride {
+		outchan<- &Portion{
+			MinX: i,
+			MinY: j,
+			MaxX: width,
+			maxY: j+p.Stride,
+		}
+	}
+	if j == height {
+		return
+	}
+	outchan<-  &Portion{
+		MinX: i,
+		MinY: j,
+		MaxX: width,
+		maxY: height,
+	}
+
 }
 
 func (c *Color) ToRGBA() *color.RGBA {

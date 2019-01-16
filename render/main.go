@@ -125,7 +125,7 @@ func main() {
 		graphics.DrawTrianglesParallelShadow(im, triangles, []graphics.Light{lit1, lit2 /*, lit3*/})
 	}
 	if *trace {
-		source := &graphics.PixelSource{im}
+		source := &graphics.PixelSource{13, im}
 		mapper := &graphics.RayTraceMapper{
 			Bounces: *bounces,
 			Width: *size,

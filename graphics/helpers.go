@@ -78,7 +78,6 @@ type RayTraceMapper struct {
 
 func (r *RayTraceMapper) Do(k maps.Keyed, outchan chan<- maps.Keyed) {
 	portion := k.(*Portion)
-	fmt.Println("\n",portion)
 	for i:= portion.MinX; i < portion.MaxX; i ++ {
 		for j := portion.MinY; j < portion.MaxY; j ++ {
 			coordx := lin(float64(i), 0, float64(r.Width), r.XMin, r.XMax)

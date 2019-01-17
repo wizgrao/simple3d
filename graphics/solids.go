@@ -212,7 +212,7 @@ func ImgSphere(subdivisions int, im image.Image) []*Triangle {
 			P2:            &Vector2{float64(r) / float64(2*subdivisions), 1 - 1/float64(subdivisions)},
 			P3:            &Vector2{.5, 1},
 			Im:            im,
-			SpecColor_:    ColorScale(White, .5),
+			SpecColor_:    ColorScale(White, .3),
 			SpecCoeff_:    8,
 			AmbientCoeff_: .05,
 		}

@@ -8,11 +8,15 @@ import (
 	"math"
 	"os"
 	"github.com/wizgrao/blow/maps"
+	"fmt"
+	"image/gif"
+	"image/jpeg"
 )
 
 var (
 	outputFile = flag.String("o", "out.png", "Output File (png)")
 	inputFile  = flag.String("i", "in.obj", "Input file (png)")
+	imageFile  = flag.String("image", "earth.jpg", "Input file (png)")
 	size       = flag.Int("s", 2000, "Size of output image")
 	xt         = flag.Float64("xt", 0, "Translation in X direction")
 	yt         = flag.Float64("yt", 0, "Translation in Y direction")
@@ -30,6 +34,38 @@ var (
 
 func main() {
 	flag.Parse()
+
+	imfile, err := os.Open(*imageFile)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	textureIm, err := jpeg.Decode(imfile)
+	if err != nil {
+		imfile.Close()
+		imfile, err = os.Open(*inputFile)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		textureIm, err = png.Decode(imfile)
+		if err != nil {
+			imfile.Close()
+			imfile, err = os.Open(*inputFile)
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+			textureIm, err = gif.Decode(imfile)
+			if err != nil {
+				fmt.Println("oop")
+				return
+			}
+		}
+	}
+	imfile.Close()
+
 	im := image.NewRGBA(image.Rect(0, 0, *size, *size))
 	fg := &graphics.Color{100, 100, 100, 255}
 	gc := &graphics.Color{253, 181, 21, 255}
@@ -54,6 +90,7 @@ func main() {
 		SpecCoeff_:    8,
 		AmbientCoeff_: .01,
 	}
+	_ = bm
 	for i := 0; i < *size; i++ {
 		for j := 0; j < *size; j++ {
 			im.Set(i, j, bg.ToRGBA())
@@ -107,7 +144,7 @@ func main() {
 	if *circles {
 		r := .5
 		c1 := graphics.ApplyTransform(graphics.SphereMat(50, gm),graphics.Translate(-r, 0, 0).Mult(graphics.Scale(r)))
-		c2 := graphics.ApplyTransform(graphics.SphereMat(50, bm),graphics.Translate(r, 0, 0).Mult(graphics.Scale(r)))
+		c2 := graphics.ApplyTransform(graphics.ImgSphere(50, textureIm),graphics.Translate(r, 0, 0).Mult(graphics.Scale(r)))
 		mesh := append(c1, c2...)
 		mesh = graphics.ApplyTransform(mesh, graphics.Translate(0, r, 1.5))
 		triangles = append(mesh, t1, t2)
